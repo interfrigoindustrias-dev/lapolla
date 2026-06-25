@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS public.predictions (
     points_earned INTEGER DEFAULT 0 NOT NULL,
     bet_amount NUMERIC DEFAULT 2000 NOT NULL,
     gain NUMERIC DEFAULT 0 NOT NULL,
+    has_paid BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     UNIQUE (user_id, match_id)
 );
@@ -160,6 +161,15 @@ CREATE POLICY "Permitir actualizar pronósticos propios antes del partido"
         EXISTS (
             SELECT 1 FROM public.matches 
             WHERE matches.id = match_id AND matches.status = 'pending' AND matches.match_date > now()
+        )
+    );
+
+CREATE POLICY "Permitir a administradores actualizar pronósticos" 
+    ON public.predictions FOR UPDATE 
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles 
+            WHERE profiles.id = auth.uid() AND profiles.is_admin = true
         )
     );
 
@@ -203,6 +213,7 @@ CREATE TABLE IF NOT EXISTS public.custom_bet_predictions (
     prediction_value TEXT NOT NULL,
     bet_amount NUMERIC NOT NULL,
     gain NUMERIC DEFAULT 0 NOT NULL,
+    has_paid BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     UNIQUE (custom_bet_id, user_id)
 );
@@ -231,6 +242,15 @@ CREATE POLICY "Permitir actualizar apuesta especial propia"
         EXISTS (
             SELECT 1 FROM public.custom_bets 
             WHERE custom_bets.id = custom_bet_id AND custom_bets.status = 'approved' AND custom_bets.resolved_result IS NULL
+        )
+    );
+
+CREATE POLICY "Permitir a administradores actualizar pronósticos especiales" 
+    ON public.custom_bet_predictions FOR UPDATE 
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles 
+            WHERE profiles.id = auth.uid() AND profiles.is_admin = true
         )
     );
 
@@ -424,4 +444,9 @@ CREATE POLICY "Permitir lectura de mensajes de chat a autenticados"
 CREATE POLICY "Permitir insertar mensajes de chat propios" 
     ON public.chat_messages FOR INSERT 
     WITH CHECK (auth.uid() = user_id);
+
+-- 11. HABILITAR TIEMPO REAL (REALTIME) PARA EL CHAT
+-- Ejecuta esto para activar las notificaciones y mensajes instantáneos sin recargar
+ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+
 

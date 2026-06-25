@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth, isSupabaseConfigured } from './AuthContext';
+import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
 import PoolDetail from './components/PoolDetail';
 import AdminPanel from './components/AdminPanel';
-import { Trophy, LogOut, ShieldAlert, LayoutDashboard, Database, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Trophy, LogOut, ShieldAlert, LayoutDashboard, Database, AlertTriangle, ArrowRight, Key } from 'lucide-react';
 
 function SupabaseConfigWarning() {
   return (
@@ -82,6 +83,29 @@ function AppContent() {
   const { user, profile, loading, signOut } = useAuth();
   const [selectedPoolId, setSelectedPoolId] = useState(null);
   const [isAdminView, setIsAdminView] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.trim().length < 6) {
+      alert('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword.trim() });
+      if (error) throw error;
+      alert('¡Contraseña actualizada con éxito!');
+      setShowChangePassword(false);
+      setNewPassword('');
+    } catch (err) {
+      alert('Error al cambiar contraseña: ' + err.message);
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   if (!isSupabaseConfigured) {
     return <SupabaseConfigWarning />;
@@ -154,6 +178,22 @@ function AppContent() {
             </div>
 
             <button 
+              onClick={() => setShowChangePassword(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '8px'
+              }}
+              title="Cambiar Contraseña"
+            >
+              <Key size={18} />
+            </button>
+
+            <button 
               onClick={signOut}
               style={{
                 background: 'transparent',
@@ -191,6 +231,65 @@ function AppContent() {
           />
         )}
       </main>
+
+      {/* MODAL DE CAMBIO DE CONTRASEÑA */}
+      {showChangePassword && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-container" style={{ maxWidth: '400px', width: '100%', padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <Key style={{ color: 'var(--primary)' }} /> Cambiar Contraseña
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>Escribe tu nueva contraseña a continuación.</p>
+            </div>
+            
+            <form onSubmit={handleUpdatePassword} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Nueva Contraseña</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder="Mínimo 6 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="submit" className="btn btn-primary" disabled={changingPassword} style={{ width: 'auto', padding: '10px 20px' }}>
+                  {changingPassword ? 'Actualizando...' : 'Actualizar'}
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ width: 'auto', padding: '10px 20px' }}
+                  onClick={() => {
+                    setShowChangePassword(false);
+                    setNewPassword('');
+                  }}
+                  disabled={changingPassword}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

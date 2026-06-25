@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign } from 'lucide-react';
 
 export default function AdminPanel() {
   const { profile } = useAuth();
-  const [activeSubTab, setActiveSubTab] = useState('matches'); // matches | custom_bets
+  const [activeSubTab, setActiveSubTab] = useState('matches'); // matches | custom_bets | recaudos
   
   // Estados para Partidos
   const [matches, setMatches] = useState([]);
@@ -21,15 +21,88 @@ export default function AdminPanel() {
   const [customBets, setCustomBets] = useState([]);
   const [resolvingResults, setResolvingResults] = useState({}); // { [betId]: resultText }
 
+  // Estados para Recaudos
+  const [allPredictions, setAllPredictions] = useState([]);
+  const [allCustomPredictions, setAllCustomPredictions] = useState([]);
+  const [recaudoFilter, setRecaudoFilter] = useState('pending'); // pending | all
+
   useEffect(() => {
     if (profile?.is_admin) {
       if (activeSubTab === 'matches') {
         fetchMatches();
-      } else {
+      } else if (activeSubTab === 'custom_bets') {
         fetchCustomBets();
+      } else if (activeSubTab === 'recaudos') {
+        fetchRecaudosData();
       }
     }
   }, [profile, activeSubTab]);
+
+  const fetchRecaudosData = async () => {
+    try {
+      const { data: matchPreds, error: mpError } = await supabase
+        .from('predictions')
+        .select(`
+          id,
+          bet_amount,
+          has_paid,
+          gain,
+          profiles:user_id (display_name, department),
+          matches:match_id (team_a, team_b, status, score_a, score_b)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (mpError) throw mpError;
+      setAllPredictions(matchPreds || []);
+
+      const { data: customPreds, error: cpError } = await supabase
+        .from('custom_bet_predictions')
+        .select(`
+          id,
+          bet_amount,
+          has_paid,
+          gain,
+          profiles:user_id (display_name, department),
+          custom_bets:custom_bet_id (title, status, resolved_result)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (cpError) throw cpError;
+      setAllCustomPredictions(customPreds || []);
+    } catch (err) {
+      console.error('Error cargando recaudos:', err);
+    }
+  };
+
+  const handleToggleMatchPayment = async (pred) => {
+    const newStatus = !pred.has_paid;
+    try {
+      const { error } = await supabase
+        .from('predictions')
+        .update({ has_paid: newStatus })
+        .eq('id', pred.id);
+
+      if (error) throw error;
+      setAllPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, has_paid: newStatus } : p));
+    } catch (err) {
+      alert('Error actualizando pago: ' + err.message);
+    }
+  };
+
+  const handleToggleCustomPayment = async (pred) => {
+    const newStatus = !pred.has_paid;
+    try {
+      const { error } = await supabase
+        .from('custom_bet_predictions')
+        .update({ has_paid: newStatus })
+        .eq('id', pred.id);
+
+      if (error) throw error;
+      setAllCustomPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, has_paid: newStatus } : p));
+    } catch (err) {
+      alert('Error actualizando pago: ' + err.message);
+    }
+  };
 
   const fetchMatches = async () => {
     const { data, error } = await supabase
@@ -260,6 +333,14 @@ export default function AdminPanel() {
           >
             <Sparkles size={16} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
             Apuestas Especiales
+          </button>
+          <button 
+            className={`tab ${activeSubTab === 'recaudos' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('recaudos')}
+            style={{ padding: '8px 16px' }}
+          >
+            <DollarSign size={16} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
+            Recaudos
           </button>
         </div>
       </div>
@@ -571,6 +652,178 @@ export default function AdminPanel() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* VISTA RECAUDOS */}
+      {activeSubTab === 'recaudos' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Tarjeta de Resumen */}
+          <div className="glass-container" style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', marginBottom: '10px' }}>Resumen de Recaudos</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Control de caja para dinero de apuestas individuales.</p>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', color: 'var(--primary)', justifyContent: 'center' }}>
+                <CheckCircle2 size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)' }}>
+                  ${(
+                    allPredictions.filter(p => p.has_paid).reduce((sum, p) => sum + p.bet_amount, 0) +
+                    allCustomPredictions.filter(p => p.has_paid).reduce((sum, p) => sum + p.bet_amount, 0)
+                  ).toLocaleString('es-CO')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cobrado / Recibido</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', color: 'var(--accent-red)', justifyContent: 'center' }}>
+                <XCircle size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f87171' }}>
+                  ${(
+                    allPredictions.filter(p => !p.has_paid).reduce((sum, p) => sum + p.bet_amount, 0) +
+                    allCustomPredictions.filter(p => !p.has_paid).reduce((sum, p) => sum + p.bet_amount, 0)
+                  ).toLocaleString('es-CO')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pendiente por Cobrar</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla de Control */}
+          <div className="glass-container" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>Registro de Transacciones</h3>
+              <select 
+                className="form-input" 
+                style={{ width: '150px', padding: '6px 12px', fontSize: '0.85rem' }}
+                value={recaudoFilter}
+                onChange={(e) => setRecaudoFilter(e.target.value)}
+              >
+                <option value="pending">Solo Pendientes</option>
+                <option value="all">Ver Todos</option>
+              </select>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '10px' }}>Usuario</th>
+                    <th style={{ padding: '10px' }}>Área</th>
+                    <th style={{ padding: '10px' }}>Tipo</th>
+                    <th style={{ padding: '10px' }}>Detalle Apuesta</th>
+                    <th style={{ padding: '10px' }}>Monto</th>
+                    <th style={{ padding: '10px', width: '140px' }}>Estado Caja</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Predicciones de partidos */}
+                  {allPredictions
+                    .filter(p => recaudoFilter === 'all' || !p.has_paid)
+                    .map(pred => (
+                      <tr key={`match-${pred.id}`} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.9rem' }}>
+                        <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{pred.profiles?.display_name}</td>
+                        <td style={{ padding: '12px 10px', color: 'var(--text-muted)' }}>{pred.profiles?.department}</td>
+                        <td style={{ padding: '12px 10px' }}><span className="match-status-badge pending" style={{ background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-blue)' }}>Partido</span></td>
+                        <td style={{ padding: '12px 10px' }}>
+                          {pred.matches ? `${pred.matches.team_a} vs ${pred.matches.team_b}` : 'Partido'}
+                        </td>
+                        <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>${pred.bet_amount?.toLocaleString('es-CO')}</td>
+                        <td style={{ padding: '12px 10px' }}>
+                          <button
+                            onClick={() => handleToggleMatchPayment(pred)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              color: pred.has_paid ? 'var(--primary)' : 'var(--text-muted)'
+                            }}
+                          >
+                            {pred.has_paid ? (
+                              <>
+                                <CheckCircle2 size={16} style={{ color: 'var(--primary)' }} />
+                                <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Recibido</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle size={16} style={{ color: 'var(--text-muted)' }} />
+                                <span>Pendiente</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                  {/* Predicciones especiales */}
+                  {allCustomPredictions
+                    .filter(p => recaudoFilter === 'all' || !p.has_paid)
+                    .map(pred => (
+                      <tr key={`custom-${pred.id}`} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.9rem' }}>
+                        <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{pred.profiles?.display_name}</td>
+                        <td style={{ padding: '12px 10px', color: 'var(--text-muted)' }}>{pred.profiles?.department}</td>
+                        <td style={{ padding: '12px 10px' }}><span className="match-status-badge pending" style={{ background: 'rgba(251, 191, 36, 0.15)', color: 'var(--secondary)' }}>Especial</span></td>
+                        <td style={{ padding: '12px 10px', fontStyle: 'italic' }}>
+                          {pred.custom_bets ? `"${pred.custom_bets.title}"` : 'Apuesta Especial'}
+                        </td>
+                        <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>${pred.bet_amount?.toLocaleString('es-CO')}</td>
+                        <td style={{ padding: '12px 10px' }}>
+                          <button
+                            onClick={() => handleToggleCustomPayment(pred)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              color: pred.has_paid ? 'var(--primary)' : 'var(--text-muted)'
+                            }}
+                          >
+                            {pred.has_paid ? (
+                              <>
+                                <CheckCircle2 size={16} style={{ color: 'var(--primary)' }} />
+                                <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Recibido</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle size={16} style={{ color: 'var(--text-muted)' }} />
+                                <span>Pendiente</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                  {allPredictions.filter(p => recaudoFilter === 'all' || !p.has_paid).length === 0 &&
+                   allCustomPredictions.filter(p => recaudoFilter === 'all' || !p.has_paid).length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ padding: '30px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No hay transacciones registradas que coincidan con el filtro.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
