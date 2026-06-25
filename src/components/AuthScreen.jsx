@@ -1,0 +1,185 @@
+import React, { useState } from 'react';
+import { useAuth } from '../AuthContext';
+import { Trophy, Mail, Lock, User, LogIn, UserPlus, Building } from 'lucide-react';
+
+export default function AuthScreen() {
+  const { signIn, signUp } = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [department, setDepartment] = useState('Administración');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (isRegister) {
+        if (!displayName.trim()) {
+          throw new Error('Por favor ingresa un nombre para mostrar.');
+        }
+        await signUp(email, password, displayName, department);
+        alert('Registro exitoso. Si es necesario, verifica tu correo. Ya puedes iniciar sesión.');
+        setIsRegister(false);
+      } else {
+        await signIn(email, password);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Ocurrió un error inesperado.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-wrapper">
+      <div className="glass-container auth-card">
+        <div className="auth-header">
+          <h1 className="auth-logo">
+            <Trophy size={36} style={{ color: '#fbbf24' }} />
+            LudoPollas
+          </h1>
+          <p className="auth-subtitle">
+            {isRegister 
+              ? 'Regístrate para competir en las pollas de la empresa' 
+              : 'Inicia sesión para ver partidos y hacer tus apuestas'}
+          </p>
+        </div>
+
+        {error && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            color: '#f87171',
+            padding: '12px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            fontSize: '0.9rem',
+            textAlign: 'left'
+          }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          {isRegister && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Nombre Completo / Apodo</label>
+                <div style={{ position: 'relative' }}>
+                  <User size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: '#9ca3af' }} />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: '42px' }}
+                    placeholder="Ej. Juan Pérez"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Área / Departamento</label>
+                <div style={{ position: 'relative' }}>
+                  <Building size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: '#9ca3af' }} />
+                  <select
+                    className="form-input"
+                    style={{ paddingLeft: '42px', appearance: 'none', WebkitAppearance: 'none' }}
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    required
+                  >
+                    <option value="Administración">Administración</option>
+                    <option value="TI">Tecnología (TI)</option>
+                    <option value="Ventas">Ventas y Comercial</option>
+                    <option value="Logística">Logística / Bodega</option>
+                    <option value="Finanzas">Finanzas / Contabilidad</option>
+                    <option value="Operaciones">Operaciones / Planta</option>
+                    <option value="Otros">Otros</option>
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Correo Corporativo / Personal</label>
+            <div style={{ position: 'relative' }}>
+              <Mail size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: '#9ca3af' }} />
+              <input
+                type="email"
+                className="form-input"
+                style={{ paddingLeft: '42px' }}
+                placeholder="juan@interfrigo.com.co"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Contraseña</label>
+            <div style={{ position: 'relative' }}>
+              <Lock size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: '#9ca3af' }} />
+              <input
+                type="password"
+                className="form-input"
+                style={{ paddingLeft: '42px' }}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <button type="submit" className="btn btn-primary" disabled={loading} style={{ marginTop: '10px' }}>
+            {loading ? (
+              'Cargando...'
+            ) : isRegister ? (
+              <>
+                <UserPlus size={18} /> Registrarme
+              </>
+            ) : (
+              <>
+                <LogIn size={18} /> Entrar
+              </>
+            )}
+          </button>
+        </form>
+
+        <div style={{ marginTop: '25px', fontSize: '0.9rem', color: '#9ca3af' }}>
+          {isRegister ? (
+            <p>
+              ¿Ya tienes una cuenta?{' '}
+              <button 
+                onClick={() => setIsRegister(false)} 
+                style={{ background: 'transparent', border: 'none', color: '#10b981', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Inicia Sesión
+              </button>
+            </p>
+          ) : (
+            <p>
+              ¿No tienes una cuenta aún?{' '}
+              <button 
+                onClick={() => setIsRegister(true)} 
+                style={{ background: 'transparent', border: 'none', color: '#10b981', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                Regístrate aquí
+              </button>
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
