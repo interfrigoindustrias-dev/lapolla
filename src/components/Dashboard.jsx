@@ -913,6 +913,65 @@ export default function Dashboard({ onSelectPool }) {
                       </div>
                     )}
 
+                    {/* Ganancia Estimada en Vivo */}
+                    {pred && (
+                      <div style={{
+                        background: 'rgba(16, 185, 129, 0.05)',
+                        border: '1px solid rgba(16, 185, 129, 0.15)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        marginBottom: '15px',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>Tu pronóstico:</span>
+                          <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+                            {pred.pred_score_a} - {pred.pred_score_b} (${pred.bet_amount?.toLocaleString()} COP)
+                          </span>
+                        </div>
+                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                        {(() => {
+                          const matchBets = allPredictionsData.filter(p => p.match_id === match.id);
+                          const totalPool = matchBets.reduce((sum, p) => sum + (p.bet_amount || 0), 0);
+                          
+                          // exact match count
+                          const exactCount = matchBets.filter(p => p.pred_score_a === pred.pred_score_a && p.pred_score_b === pred.pred_score_b).length;
+                          const estExactWin = exactCount > 0 ? (totalPool / exactCount) : totalPool;
+
+                          // outcome count
+                          const predOutcome = pred.pred_score_a > pred.pred_score_b ? 'A' : pred.pred_score_a < pred.pred_score_b ? 'B' : 'D';
+                          const outcomeCount = matchBets.filter(p => {
+                            const outcome = p.pred_score_a > p.pred_score_b ? 'A' : p.pred_score_a < p.pred_score_b ? 'B' : 'D';
+                            return outcome === predOutcome;
+                          }).length;
+                          const estOutcomeWin = outcomeCount > 0 ? (totalPool / outcomeCount) : totalPool;
+
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Ganancia est. (marcador exacto):</span>
+                                <span style={{ fontWeight: 'bold', color: '#fbbf24' }}>
+                                  ${Math.round(estExactWin).toLocaleString()} COP
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Ganancia est. (solo ganador/empate):</span>
+                                <span style={{ color: 'var(--accent-blue)' }}>
+                                  ${Math.round(estOutcomeWin).toLocaleString()} COP
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '2px', textAlign: 'right' }}>
+                                *Estimación dinámica en vivo. Cambia a medida que otros apuestan.
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Apuesta inputs */}
                     <div className="prediction-footer" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -1153,6 +1212,50 @@ export default function Dashboard({ onSelectPool }) {
                               Bolsa: ${poolSum.toLocaleString()}
                             </span>
                           </div>
+
+                          {/* Ganancia Estimada en Vivo para Especiales */}
+                          {pred && (
+                            <div style={{
+                              background: 'rgba(16, 185, 129, 0.05)',
+                              border: '1px solid rgba(16, 185, 129, 0.15)',
+                              borderRadius: '8px',
+                              padding: '10px 14px',
+                              fontSize: '0.85rem',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Tu pronóstico:</span>
+                                <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
+                                  "{pred.prediction_value}" (${pred.bet_amount?.toLocaleString()} COP)
+                                </span>
+                              </div>
+                              <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+                              {(() => {
+                                const betPredictions = allCustomPredictionsData.filter(p => p.custom_bet_id === bet.id);
+                                const totalPool = betPredictions.reduce((sum, p) => sum + (p.bet_amount || 0), 0);
+                                
+                                // same value count
+                                const sameValueCount = betPredictions.filter(p => p.prediction_value === pred.prediction_value).length;
+                                const estWin = sameValueCount > 0 ? (totalPool / sameValueCount) : totalPool;
+
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                      <span style={{ color: 'var(--text-muted)' }}>Ganancia est. (si aciertas):</span>
+                                      <span style={{ fontWeight: 'bold', color: '#fbbf24' }}>
+                                        ${Math.round(estWin).toLocaleString()} COP
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '2px', textAlign: 'right' }}>
+                                      *Estimación dinámica en vivo. Cambia a medida que otros apuestan.
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
 
                           <div className="prediction-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', flex: '1' }}>
