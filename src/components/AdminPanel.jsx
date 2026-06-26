@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer, Users } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer, Users, Edit } from 'lucide-react';
+
+const renderAdminTeamIcon = (teamIcon) => {
+  if (!teamIcon) return null;
+  if (teamIcon.startsWith('http') || teamIcon.startsWith('/') || teamIcon.startsWith('data:image')) {
+    return <img src={teamIcon} alt="" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />;
+  }
+  return <span style={{ fontSize: '1.1rem' }}>{teamIcon}</span>;
+};
 
 
 export default function AdminPanel() {
@@ -12,11 +20,15 @@ export default function AdminPanel() {
   const [matches, setMatches] = useState([]);
   const [teamA, setTeamA] = useState('');
   const [teamB, setTeamB] = useState('');
+  const [teamAIcon, setTeamAIcon] = useState('');
+  const [teamBIcon, setTeamBIcon] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [minBet, setMinBet] = useState('2000');
   const [maxBet, setMaxBet] = useState('50000');
   const [loading, setLoading] = useState(false);
   const [scores, setScores] = useState({}); // { [matchId]: { scoreA, scoreB, status } }
+  const [editingMatchId, setEditingMatchId] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
 
   // Estados para Apuestas Especiales
   const [customBets, setCustomBets] = useState([]);
@@ -322,6 +334,8 @@ export default function AdminPanel() {
         .insert({
           team_a: teamA.trim(),
           team_b: teamB.trim(),
+          team_a_icon: teamAIcon.trim() || null,
+          team_b_icon: teamBIcon.trim() || null,
           match_date: new Date(matchDate).toISOString(),
           min_bet: parseFloat(minBet) || 2000,
           max_bet: parseFloat(maxBet) || 50000,
@@ -332,6 +346,8 @@ export default function AdminPanel() {
 
       setTeamA('');
       setTeamB('');
+      setTeamAIcon('');
+      setTeamBIcon('');
       setMatchDate('');
       setMinBet('2000');
       setMaxBet('50000');
@@ -411,6 +427,43 @@ export default function AdminPanel() {
       alert('Partido eliminado.');
     } catch (err) {
       alert('Error eliminando partido: ' + (err.message || err));
+    }
+  };
+
+  const startEditing = (match) => {
+    setEditingMatchId(match.id);
+    setEditFormData({
+      teamA: match.team_a,
+      teamB: match.team_b,
+      teamAIcon: match.team_a_icon || '',
+      teamBIcon: match.team_b_icon || '',
+      matchDate: new Date(match.match_date).toISOString().substring(0, 16),
+      minBet: match.min_bet.toString(),
+      maxBet: match.max_bet.toString()
+    });
+  };
+
+  const handleSaveEditedMatch = async (matchId) => {
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .update({
+          team_a: editFormData.teamA.trim(),
+          team_b: editFormData.teamB.trim(),
+          team_a_icon: editFormData.teamAIcon.trim() || null,
+          team_b_icon: editFormData.teamBIcon.trim() || null,
+          match_date: new Date(editFormData.matchDate).toISOString(),
+          min_bet: parseFloat(editFormData.minBet) || 2000,
+          max_bet: parseFloat(editFormData.maxBet) || 50000
+        })
+        .eq('id', matchId);
+
+      if (error) throw error;
+      setEditingMatchId(null);
+      fetchMatches();
+      alert('Partido actualizado con éxito.');
+    } catch (err) {
+      alert('Error guardando cambios del partido: ' + (err.message || err));
     }
   };
 
@@ -531,16 +584,27 @@ export default function AdminPanel() {
               <PlusCircle style={{ color: 'var(--primary)' }} /> Agregar Nuevo Partido
             </h2>
 
-            <form onSubmit={handleAddMatch} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', alignItems: 'end' }}>
+            <form onSubmit={handleAddMatch} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', alignItems: 'end' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Equipo A</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Ej. Colombia"
+                  placeholder="Ej. Francia"
                   value={teamA}
                   onChange={(e) => setTeamA(e.target.value)}
                   required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Icono/Emoji A (ej: 🇨🇴 o URL)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Emoji o URL de imagen"
+                  value={teamAIcon}
+                  onChange={(e) => setTeamAIcon(e.target.value)}
                 />
               </div>
 
@@ -553,6 +617,17 @@ export default function AdminPanel() {
                   value={teamB}
                   onChange={(e) => setTeamB(e.target.value)}
                   required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Icono/Emoji B (ej: 🏴󠁧󠁢󠁥󠁮󠁧󠁿 o URL)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Emoji o URL de imagen"
+                  value={teamBIcon}
+                  onChange={(e) => setTeamBIcon(e.target.value)}
                 />
               </div>
 
@@ -610,6 +685,103 @@ export default function AdminPanel() {
                 {matches.map(match => {
                   const s = scores[match.id] || { scoreA: '', scoreB: '', status: 'pending' };
                   
+                  if (editingMatchId === match.id) {
+                    return (
+                      <div 
+                        key={match.id} 
+                        className="glass-container" 
+                        style={{ 
+                          padding: '20px', 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                          gap: '15px',
+                          background: 'rgba(255,255,255,0.02)',
+                          borderColor: 'var(--primary)'
+                        }}
+                      >
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Equipo A</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={editFormData.teamA}
+                            onChange={(e) => setEditFormData({ ...editFormData, teamA: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Icono A (Emoji o URL)</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={editFormData.teamAIcon}
+                            onChange={(e) => setEditFormData({ ...editFormData, teamAIcon: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Equipo B</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={editFormData.teamB}
+                            onChange={(e) => setEditFormData({ ...editFormData, teamB: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Icono B (Emoji o URL)</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={editFormData.teamBIcon}
+                            onChange={(e) => setEditFormData({ ...editFormData, teamBIcon: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Fecha</label>
+                          <input
+                            type="datetime-local"
+                            className="form-input"
+                            value={editFormData.matchDate}
+                            onChange={(e) => setEditFormData({ ...editFormData, matchDate: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Mínimo ($)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={editFormData.minBet}
+                            onChange={(e) => setEditFormData({ ...editFormData, minBet: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Máximo ($)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={editFormData.maxBet}
+                            onChange={(e) => setEditFormData({ ...editFormData, maxBet: e.target.value })}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'end', gridColumn: '1 / -1', justifyContent: 'flex-end', marginTop: '10px' }}>
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '8px 16px', width: 'auto', fontSize: '0.85rem' }}
+                            onClick={() => handleSaveEditedMatch(match.id)}
+                          >
+                            Guardar Cambios
+                          </button>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '8px 16px', width: 'auto', fontSize: '0.85rem' }}
+                            onClick={() => setEditingMatchId(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div 
                       key={match.id} 
@@ -626,8 +798,8 @@ export default function AdminPanel() {
                       }}
                     >
                       <div style={{ flex: '1 1 200px' }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: 'white' }}>
-                          {match.team_a} vs {match.team_b}
+                        <div style={{ fontWeight: 'bold', fontSize: '1.05rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {renderAdminTeamIcon(match.team_a_icon)} {match.team_a} vs {renderAdminTeamIcon(match.team_b_icon)} {match.team_b}
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                           Límites: ${match.min_bet?.toLocaleString()} - ${match.max_bet?.toLocaleString()}
@@ -683,12 +855,21 @@ export default function AdminPanel() {
                           style={{ padding: '8px 16px', width: 'auto', fontSize: '0.85rem' }}
                           onClick={() => handleUpdateMatch(match.id)}
                         >
-                          Guardar
+                          Guardar Marcador
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '8px', width: 'auto', color: 'var(--primary)', borderColor: 'rgba(16, 185, 129, 0.2)' }}
+                          onClick={() => startEditing(match)}
+                          title="Editar Partido"
+                        >
+                          <Edit size={16} />
                         </button>
                         <button 
                           className="btn btn-secondary" 
                           style={{ padding: '8px', width: 'auto', color: 'var(--accent-red)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
                           onClick={() => handleDeleteMatch(match.id)}
+                          title="Eliminar Partido"
                         >
                           <Trash2 size={16} />
                         </button>

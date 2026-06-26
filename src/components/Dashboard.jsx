@@ -6,6 +6,24 @@ import ChatWall from './ChatWall';
 import Confetti from './Confetti';
 import { Trophy, Calendar, Check, Play, Lock, Users, PlusCircle, LogIn, DollarSign, Sparkles, Send, Info, BookOpen, Award, CheckCircle2, XCircle, ArrowRight, Activity } from 'lucide-react';
 
+const renderTeamIcon = (teamName, teamIcon) => {
+  if (!teamIcon) {
+    return <div className="team-flag">{teamName.substring(0, 3).toUpperCase()}</div>;
+  }
+  if (teamIcon.startsWith('http://') || teamIcon.startsWith('https://') || teamIcon.startsWith('/') || teamIcon.startsWith('data:image')) {
+    return (
+      <div className="team-flag" style={{ background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: 0 }}>
+        <img src={teamIcon} alt={teamName} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      </div>
+    );
+  }
+  return (
+    <div className="team-flag" style={{ fontSize: '1.8rem', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+      {teamIcon}
+    </div>
+  );
+};
+
 export default function Dashboard({ onSelectPool }) {
   const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('matches'); // matches | custom_bets | leaderboard | pools | instructions
@@ -843,7 +861,7 @@ export default function Dashboard({ onSelectPool }) {
 
                     <div className="match-body">
                       <div className="match-team">
-                        <div className="team-flag">{match.team_a.substring(0, 3).toUpperCase()}</div>
+                        {renderTeamIcon(match.team_a, match.team_a_icon)}
                         <div className="team-name">{match.team_a}</div>
                       </div>
 
@@ -864,7 +882,7 @@ export default function Dashboard({ onSelectPool }) {
                       )}
 
                       <div className="match-team">
-                        <div className="team-flag">{match.team_b.substring(0, 3).toUpperCase()}</div>
+                        {renderTeamIcon(match.team_b, match.team_b_icon)}
                         <div className="team-name">{match.team_b}</div>
                       </div>
                     </div>

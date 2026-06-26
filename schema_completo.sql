@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS public.matches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     team_a TEXT NOT NULL,
     team_b TEXT NOT NULL,
+    team_a_icon TEXT, -- Emoji, bandera o URL del Equipo A
+    team_b_icon TEXT, -- Emoji, bandera o URL del Equipo B
     match_date TIMESTAMP WITH TIME ZONE NOT NULL,
     score_a INTEGER,
     score_b INTEGER,
