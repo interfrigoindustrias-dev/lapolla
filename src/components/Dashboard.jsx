@@ -44,6 +44,8 @@ export default function Dashboard({ onSelectPool }) {
   const [leaderboardSubTab, setLeaderboardSubTab] = useState('users'); // users | depts
   const [deptLeaderboard, setDeptLeaderboard] = useState([]);
   const [allPredictionsData, setAllPredictionsData] = useState([]); // Para el simulador
+  const [allCustomPredictionsData, setAllCustomPredictionsData] = useState([]);
+  const [expandedBets, setExpandedBets] = useState({});
 
   // Simulador de Posiciones
   const [simulatedMode, setSimulatedMode] = useState(false);
@@ -178,16 +180,17 @@ export default function Dashboard({ onSelectPool }) {
 
       const { data: preds, error: prError } = await supabase
         .from('predictions')
-        .select('user_id, match_id, points_earned, pred_score_a, pred_score_b, gain');
+        .select('user_id, match_id, points_earned, pred_score_a, pred_score_b, gain, bet_amount');
 
       const { data: customPreds, error: cprError } = await supabase
         .from('custom_bet_predictions')
-        .select('user_id, gain');
+        .select('user_id, custom_bet_id, bet_amount, prediction_value, gain');
 
       if (pError || prError || cprError) throw pError || prError || cprError;
 
-      // Guardar todas las predicciones para el simulador
+      // Guardar todas las predicciones para el simulador y visualización
       setAllPredictionsData(preds || []);
+      setAllCustomPredictionsData(customPreds || []);
 
       const pointsMap = {};
       const gainMap = {};
@@ -641,6 +644,13 @@ export default function Dashboard({ onSelectPool }) {
     }));
   };
 
+  const toggleExpandedBets = (matchId) => {
+    setExpandedBets(prev => ({
+      ...prev,
+      [matchId]: !prev[matchId]
+    }));
+  };
+
   const handleCreatePool = async (e) => {
     e.preventDefault();
     setActionError('');
@@ -987,6 +997,88 @@ export default function Dashboard({ onSelectPool }) {
                         </div>
 
                       </div>
+
+                      {/* ACORDEÓN DE COMPAÑEROS APOSTADORES EN EL PARTIDO */}
+                      {(() => {
+                        const matchBets = allPredictionsData.filter(p => p.match_id === match.id);
+                        if (matchBets.length === 0) return null;
+
+                        return (
+                          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px' }}>
+                            <button
+                              className="btn btn-secondary"
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                fontSize: '0.8rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px',
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                borderRadius: '6px'
+                              }}
+                              onClick={() => toggleExpandedBets(match.id)}
+                            >
+                              <Users size={14} style={{ color: 'var(--primary)' }} />
+                              {expandedBets[match.id] ? 'Ocultar predicciones de compañeros' : `Ver predicciones de compañeros (${matchBets.length})`}
+                            </button>
+
+                            {expandedBets[match.id] && (
+                              <div style={{
+                                marginTop: '10px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '8px',
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                padding: '4px',
+                                background: 'rgba(0,0,0,0.2)',
+                                borderRadius: '6px'
+                              }}>
+                                {matchBets.map(bet => {
+                                  const prof = leaderboard.find(l => l.id === bet.user_id);
+                                  return (
+                                    <div
+                                      key={bet.user_id}
+                                      style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: '8px 10px',
+                                        background: 'rgba(255,255,255,0.02)',
+                                        borderRadius: '4px',
+                                        fontSize: '0.8rem',
+                                        borderLeft: '3px solid var(--primary)'
+                                      }}
+                                    >
+                                      <div>
+                                        <span style={{ fontWeight: 'bold', color: 'white' }}>{prof?.display_name || 'Compañero'}</span>
+                                        {prof?.department && (
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '6px' }}>({prof.department})</span>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>${bet.bet_amount?.toLocaleString('es-CO')}</span>
+                                        <span style={{
+                                          fontWeight: 'bold',
+                                          color: 'var(--primary)',
+                                          background: 'rgba(16, 185, 129, 0.1)',
+                                          padding: '2px 8px',
+                                          borderRadius: '4px'
+                                        }}>
+                                          {bet.pred_score_a} : {bet.pred_score_b}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -1103,6 +1195,88 @@ export default function Dashboard({ onSelectPool }) {
                               )}
                             </div>
                           </div>
+
+                          {/* ACORDEÓN DE COMPAÑEROS APOSTADORES EN APUESTA ESPECIAL */}
+                          {(() => {
+                            const betPredictions = allCustomPredictionsData.filter(p => p.custom_bet_id === bet.id);
+                            if (betPredictions.length === 0) return null;
+
+                            return (
+                              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px' }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{
+                                    width: '100%',
+                                    padding: '6px 12px',
+                                    fontSize: '0.75rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    background: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid rgba(255,255,255,0.05)',
+                                    borderRadius: '6px'
+                                  }}
+                                  onClick={() => toggleExpandedBets(`custom-${bet.id}`)}
+                                >
+                                  <Users size={12} style={{ color: 'var(--secondary)' }} />
+                                  {expandedBets[`custom-${bet.id}`] ? 'Ocultar apuestas de compañeros' : `Ver apuestas de compañeros (${betPredictions.length})`}
+                                </button>
+
+                                {expandedBets[`custom-${bet.id}`] && (
+                                  <div style={{
+                                    marginTop: '10px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px',
+                                    maxHeight: '150px',
+                                    overflowY: 'auto',
+                                    padding: '4px',
+                                    background: 'rgba(0,0,0,0.2)',
+                                    borderRadius: '6px'
+                                  }}>
+                                    {betPredictions.map(p => {
+                                      const prof = leaderboard.find(l => l.id === p.user_id);
+                                      return (
+                                        <div
+                                          key={p.user_id}
+                                          style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '6px 10px',
+                                            background: 'rgba(255,255,255,0.02)',
+                                            borderRadius: '4px',
+                                            fontSize: '0.75rem',
+                                            borderLeft: '3px solid var(--secondary)'
+                                          }}
+                                        >
+                                          <div>
+                                            <span style={{ fontWeight: 'bold', color: 'white' }}>{prof?.display_name || 'Compañero'}</span>
+                                            {prof?.department && (
+                                              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: '6px' }}>({prof.department})</span>
+                                            )}
+                                          </div>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                            <span style={{ color: 'var(--text-muted)' }}>${p.bet_amount?.toLocaleString('es-CO')}</span>
+                                            <span style={{
+                                              fontWeight: 'bold',
+                                              color: 'var(--secondary)',
+                                              background: 'rgba(251, 191, 36, 0.1)',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px'
+                                            }}>
+                                              {p.prediction_value}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })
