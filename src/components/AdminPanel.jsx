@@ -92,6 +92,7 @@ export default function AdminPanel() {
         .from('predictions')
         .select(`
           id,
+          match_id,
           bet_amount,
           has_paid,
           gain,
@@ -107,6 +108,7 @@ export default function AdminPanel() {
         .from('custom_bet_predictions')
         .select(`
           id,
+          custom_bet_id,
           bet_amount,
           has_paid,
           gain,
