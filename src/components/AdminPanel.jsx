@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer } from 'lucide-react';
+
 
 export default function AdminPanel() {
   const { profile } = useAuth();
@@ -102,6 +103,139 @@ export default function AdminPanel() {
     } catch (err) {
       alert('Error actualizando pago: ' + err.message);
     }
+  };
+
+  const handlePrintBettors = (matchOrBetId, type) => {
+    let title = "";
+    let bettorsList = [];
+
+    if (type === 'match') {
+      const match = matches.find(m => m.id === matchOrBetId);
+      if (!match) return;
+      title = `Planilla de Cobro - Partido: ${match.team_a} vs ${match.team_b}`;
+      bettorsList = allPredictions.filter(p => p.match_id === matchOrBetId);
+    } else {
+      const bet = customBets.find(b => b.id === matchOrBetId);
+      if (!bet) return;
+      title = `Planilla de Cobro - Especial: "${bet.title}"`;
+      bettorsList = allCustomPredictions.filter(p => p.custom_bet_id === matchOrBetId);
+    }
+
+    if (bettorsList.length === 0) {
+      alert("No hay apuestas registradas para este evento.");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Por favor permite las ventanas emergentes (pop-ups) para imprimir.");
+      return;
+    }
+
+    const rowsHtml = bettorsList.map((b, idx) => `
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">${idx + 1}</td>
+        <td style="border: 1px solid #ddd; padding: 10px; font-weight: bold;">${b.profiles?.display_name || 'Empleado'}</td>
+        <td style="border: 1px solid #ddd; padding: 10px;">${b.profiles?.department || 'N/A'}</td>
+        <td style="border: 1px solid #ddd; padding: 10px; font-weight: bold; text-align: right;">$${b.bet_amount.toLocaleString('es-CO')}</td>
+        <td style="border: 1px solid #ddd; padding: 10px; text-align: center;">
+          ${type === 'match' ? `${b.pred_score_a} - ${b.pred_score_b}` : b.prediction_value}
+        </td>
+        <td style="border: 1px solid #ddd; padding: 10px; text-align: center; font-weight: bold; color: ${b.has_paid ? '#10b981' : '#f59e0b'};">
+          ${b.has_paid ? 'Cobrado' : 'PENDIENTE'}
+        </td>
+        <td style="border: 1px solid #ddd; padding: 10px; width: 120px;"></td>
+      </tr>
+    `).join('');
+
+    const totalCollected = bettorsList.filter(b => b.has_paid).reduce((sum, b) => sum + b.bet_amount, 0);
+    const totalPending = bettorsList.filter(b => !b.has_paid).reduce((sum, b) => sum + b.bet_amount, 0);
+    const totalAmount = bettorsList.reduce((sum, b) => sum + b.bet_amount, 0);
+
+    const docHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; color: #333; margin: 30px; font-size: 13px; }
+          h1 { font-size: 20px; color: #111; margin-bottom: 5px; }
+          .meta { font-size: 12px; color: #666; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+          th { background-color: #f5f5f5; border: 1px solid #ddd; padding: 10px; font-weight: bold; font-size: 12px; text-align: left; }
+          .summary-box { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; border: 1px solid #ccc; background-color: #fafafa; padding: 15px; border-radius: 6px; margin-bottom: 30px; }
+          .summary-item { font-size: 13px; }
+          .summary-value { font-weight: bold; font-size: 18px; margin-top: 4px; }
+          .footer { margin-top: 50px; font-size: 11px; text-align: center; color: #999; border-top: 1px dashed #ccc; padding-top: 15px; }
+          @media print {
+            body { margin: 15px; }
+            button { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+          <div>
+            <h1 style="margin: 0 0 5px 0;">LudoPollas - Control de Cobros</h1>
+            <div class="meta">Generado el ${new Date().toLocaleString('es-CO')} | Empresa: Interfrigo</div>
+          </div>
+          <button onclick="window.print();" style="padding: 10px 18px; background-color: #10b981; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 13px;">
+            🖨️ Imprimir Planilla
+          </button>
+        </div>
+
+        <h3 style="font-size: 15px; margin-top: 0; margin-bottom: 15px;">Evento: <span style="font-weight: normal; color: #555;">${title.replace('Planilla de Cobro - ', '')}</span></h3>
+
+        <div class="summary-box">
+          <div class="summary-item">
+            <div>Cobrado / Recibido:</div>
+            <div class="summary-value" style="color: #10b981;">$${totalCollected.toLocaleString('es-CO')}</div>
+          </div>
+          <div class="summary-item">
+            <div>Pendiente por Cobrar:</div>
+            <div class="summary-value" style="color: #f59e0b;">$${totalPending.toLocaleString('es-CO')}</div>
+          </div>
+          <div class="summary-item">
+            <div>Total Esperado:</div>
+            <div class="summary-value" style="color: #111;">$${totalAmount.toLocaleString('es-CO')}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;">#</th>
+              <th>Participante</th>
+              <th>Departamento / Área</th>
+              <th style="text-align: right; width: 120px;">Monto Apostado</th>
+              <th style="width: 110px; text-align: center;">Predicción</th>
+              <th style="width: 120px; text-align: center;">Estado Recaudo</th>
+              <th style="width: 140px; text-align: center;">Firma / OK</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          LudoPollas - Control Interno. Todos los derechos reservados.
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(docHtml);
+    printWindow.document.close();
   };
 
   const fetchMatches = async () => {
@@ -694,6 +828,61 @@ export default function AdminPanel() {
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pendiente por Cobrar</div>
               </div>
+            </div>
+          </div>
+
+          {/* Planillas Imprimibles por Evento */}
+          <div className="glass-container" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <Printer style={{ color: 'var(--primary)' }} /> Planillas de Cobro Imprimibles
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px', marginBottom: '20px' }}>
+              Selecciona un evento para abrir y mandar a imprimir una hoja de control de cobros con las firmas y montos de todos los apostadores.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+              {/* Partidos con apuestas */}
+              {matches.filter(m => allPredictions.some(p => p.match_id === m.id)).map(match => {
+                const count = allPredictions.filter(p => p.match_id === match.id).length;
+                const total = allPredictions.filter(p => p.match_id === match.id).reduce((sum, p) => sum + p.bet_amount, 0);
+                
+                return (
+                  <div key={match.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{match.team_a} vs {match.team_b}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{count} apostadores | Total: <strong>${total.toLocaleString('es-CO')}</strong></div>
+                    </div>
+                    <button className="btn btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handlePrintBettors(match.id, 'match')}>
+                      <Printer size={14} /> Planilla
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Especiales con apuestas */}
+              {customBets.filter(b => allCustomPredictions.some(p => p.custom_bet_id === b.id)).map(bet => {
+                const count = allCustomPredictions.filter(p => p.custom_bet_id === bet.id).length;
+                const total = allCustomPredictions.filter(p => p.custom_bet_id === bet.id).reduce((sum, p) => sum + p.bet_amount, 0);
+                
+                return (
+                  <div key={bet.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1, marginRight: '10px' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>"{bet.title}"</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{count} apostadores | Total: <strong>${total.toLocaleString('es-CO')}</strong></div>
+                    </div>
+                    <button className="btn btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handlePrintBettors(bet.id, 'custom')}>
+                      <Printer size={14} /> Planilla
+                    </button>
+                  </div>
+                );
+              })}
+
+              {matches.filter(m => allPredictions.some(p => p.match_id === m.id)).length === 0 &&
+               customBets.filter(b => allCustomPredictions.some(p => p.custom_bet_id === b.id)).length === 0 && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', gridColumn: '1 / -1', textAlign: 'center' }}>
+                  No hay partidos ni apuestas especiales con predicciones activas para imprimir planillas.
+                </p>
+              )}
             </div>
           </div>
 
