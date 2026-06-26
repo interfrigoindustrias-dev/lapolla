@@ -601,6 +601,28 @@ export default function Dashboard({ onSelectPool }) {
     }));
   };
 
+  const handleScoreChange = (matchId, team, val) => {
+    const cleanVal = val === '' ? '' : val.replace(/\D/g, '');
+    setLocalPreds(prev => ({
+      ...prev,
+      [matchId]: {
+        ...prev[matchId],
+        [team === 'A' ? 'scoreA' : 'scoreB']: cleanVal === '' ? '' : parseInt(cleanVal, 10)
+      }
+    }));
+  };
+
+  const handleBetAmountChange = (matchId, val) => {
+    const cleanVal = val === '' ? '' : val.replace(/\D/g, '');
+    setLocalPreds(prev => ({
+      ...prev,
+      [matchId]: {
+        ...prev[matchId],
+        betAmount: cleanVal === '' ? '' : parseInt(cleanVal, 10)
+      }
+    }));
+  };
+
   const handleCreatePool = async (e) => {
     e.preventDefault();
     setActionError('');

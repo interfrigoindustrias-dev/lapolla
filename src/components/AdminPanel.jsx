@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer, Users } from 'lucide-react';
 
 
 export default function AdminPanel() {
   const { profile } = useAuth();
-  const [activeSubTab, setActiveSubTab] = useState('matches'); // matches | custom_bets | recaudos
+  const [activeSubTab, setActiveSubTab] = useState('matches'); // matches | custom_bets | recaudos | users
   
   // Estados para Partidos
   const [matches, setMatches] = useState([]);
@@ -27,6 +27,9 @@ export default function AdminPanel() {
   const [allCustomPredictions, setAllCustomPredictions] = useState([]);
   const [recaudoFilter, setRecaudoFilter] = useState('pending'); // pending | all
 
+  // Estados para Gestión de Usuarios
+  const [allProfiles, setAllProfiles] = useState([]);
+
   useEffect(() => {
     if (profile?.is_admin) {
       if (activeSubTab === 'matches') {
@@ -35,9 +38,41 @@ export default function AdminPanel() {
         fetchCustomBets();
       } else if (activeSubTab === 'recaudos') {
         fetchRecaudosData();
+        fetchMatches();
+        fetchCustomBets();
+      } else if (activeSubTab === 'users') {
+        fetchProfiles();
       }
     }
   }, [profile, activeSubTab]);
+
+  const fetchProfiles = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('display_name', { ascending: true });
+    
+    if (error) {
+      console.error('Error cargando perfiles en admin:', error);
+    } else {
+      setAllProfiles(data || []);
+    }
+  };
+
+  const toggleAdminStatus = async (userId, currentStatus) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_admin: !currentStatus })
+        .eq('id', userId);
+
+      if (error) throw error;
+      fetchProfiles();
+      alert('Permisos de administrador actualizados con éxito.');
+    } catch (err) {
+      alert('Error actualizando permisos: ' + (err.message || err));
+    }
+  };
 
   const fetchRecaudosData = async () => {
     try {
@@ -475,6 +510,14 @@ export default function AdminPanel() {
           >
             <DollarSign size={16} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
             Recaudos
+          </button>
+          <button 
+            className={`tab ${activeSubTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('users')}
+            style={{ padding: '8px 16px' }}
+          >
+            <Users size={16} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
+            Usuarios / Admins
           </button>
         </div>
       </div>
@@ -1013,6 +1056,103 @@ export default function AdminPanel() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* VISTA USUARIOS / ADMINS */}
+      {activeSubTab === 'users' && (
+        <div className="glass-container" style={{ padding: '24px' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+            <Users style={{ color: 'var(--primary)' }} /> Gestión de Usuarios y Administradores
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px', marginBottom: '20px' }}>
+            Aquí puedes promover usuarios de la empresa como administradores de LudoPollas o revocar sus permisos.
+          </p>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="recaudos-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Usuario</th>
+                  <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Área / Departamento</th>
+                  <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>Rol Actual</th>
+                  <th style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allProfiles.map(p => (
+                  <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <td style={{ padding: '12px 8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: p.is_admin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)',
+                        color: p.is_admin ? 'var(--primary)' : 'var(--text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'bold',
+                        fontSize: '0.85rem'
+                      }}>
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          (p.display_name || 'U').charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{p.display_name}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {p.id.substring(0, 8)}...</div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 8px', fontSize: '0.85rem' }}>
+                      {p.department || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin asignar</span>}
+                    </td>
+                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: '50px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        background: p.is_admin ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.05)',
+                        color: p.is_admin ? 'var(--primary)' : 'var(--text-muted)'
+                      }}>
+                        {p.is_admin ? 'Administrador' : 'Apostador'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                      {p.id === profile?.id ? (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Tú (Actual)</span>
+                      ) : (
+                        <button
+                          className={`btn ${p.is_admin ? 'btn-secondary' : 'btn-primary'}`}
+                          onClick={() => toggleAdminStatus(p.id, p.is_admin)}
+                          style={{
+                            width: 'auto',
+                            padding: '6px 12px',
+                            fontSize: '0.8rem',
+                            background: p.is_admin ? 'rgba(239, 68, 68, 0.1)' : 'var(--primary)',
+                            color: p.is_admin ? '#f87171' : 'var(--bg-obsidian)',
+                            border: p.is_admin ? '1px solid rgba(239, 68, 68, 0.2)' : 'none'
+                          }}
+                        >
+                          {p.is_admin ? 'Quitar Admin' : 'Hacer Admin'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {allProfiles.length === 0 && (
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                      No se encontraron usuarios.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
