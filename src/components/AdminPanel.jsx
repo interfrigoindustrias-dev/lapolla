@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer, Users, Edit } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, ShieldCheck, Trophy, Sparkles, CheckCircle2, XCircle, DollarSign, Printer, Users, Edit, Wallet } from 'lucide-react';
 
 const renderAdminTeamIcon = (teamIcon) => {
   if (!teamIcon) return null;
@@ -42,6 +42,13 @@ export default function AdminPanel() {
   // Estados para Gestión de Usuarios
   const [allProfiles, setAllProfiles] = useState([]);
 
+  // Estados para Billetera Nequi
+  const [walletTransactions, setWalletTransactions] = useState([]);
+  const [appSettings, setAppSettings] = useState({ admin_nequi_phone: '3000000000', admin_nequi_qr_url: '' });
+  const [adminNequiPhone, setAdminNequiPhone] = useState('3000000000');
+  const [adminNequiQrUrl, setAdminNequiQrUrl] = useState('');
+  const [processingTx, setProcessingTx] = useState({});
+
   useEffect(() => {
     if (profile?.is_admin) {
       if (activeSubTab === 'matches') {
@@ -54,6 +61,9 @@ export default function AdminPanel() {
         fetchCustomBets();
       } else if (activeSubTab === 'users') {
         fetchProfiles();
+      } else if (activeSubTab === 'wallets') {
+        fetchWalletTransactions();
+        fetchAppSettings();
       }
     }
   }, [profile, activeSubTab]);
@@ -69,6 +79,65 @@ export default function AdminPanel() {
     } else {
       setAllProfiles(data || []);
     }
+  };
+
+  const fetchWalletTransactions = async () => {
+    const { data, error } = await supabase
+      .from('wallet_transactions')
+      .select('*, profiles(display_name, department, nequi_phone)')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching transactions:', error);
+    } else {
+      setWalletTransactions(data || []);
+    }
+  };
+
+  const fetchAppSettings = async () => {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (error) {
+      console.error('Error fetching settings:', error);
+    } else if (data) {
+      setAppSettings(data);
+      setAdminNequiPhone(data.admin_nequi_phone);
+      setAdminNequiQrUrl(data.admin_nequi_qr_url || '');
+    }
+  };
+
+  const handleUpdateSettings = async (e) => {
+    e.preventDefault();
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ id: 1, admin_nequi_phone: adminNequiPhone, admin_nequi_qr_url: adminNequiQrUrl });
+
+    if (error) {
+      alert('Error actualizando configuración: ' + error.message);
+    } else {
+      alert('Configuración actualizada con éxito.');
+      fetchAppSettings();
+    }
+  };
+
+  const handleProcessTransaction = async (txId, status) => {
+    setProcessingTx(prev => ({ ...prev, [txId]: true }));
+    const { error } = await supabase
+      .from('wallet_transactions')
+      .update({ status })
+      .eq('id', txId);
+
+    if (error) {
+      alert('Error procesando transacción: ' + error.message);
+    } else {
+      alert(`Transacción ${status === 'approved' ? 'aprobada' : status === 'completed' ? 'completada' : 'rechazada'} con éxito.`);
+      fetchWalletTransactions();
+    }
+    setProcessingTx(prev => ({ ...prev, [txId]: false }));
   };
 
   const toggleAdminStatus = async (userId, currentStatus) => {
@@ -573,6 +642,14 @@ export default function AdminPanel() {
           >
             <Users size={16} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
             Usuarios / Admins
+          </button>
+          <button 
+            className={`tab ${activeSubTab === 'wallets' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('wallets')}
+            style={{ padding: '8px 16px' }}
+          >
+            <Wallet size={16} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
+            Billeteras / Nequi
           </button>
         </div>
       </div>
@@ -1337,6 +1414,249 @@ export default function AdminPanel() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* VISTA BILLETERAS / NEQUI */}
+      {activeSubTab === 'wallets' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Fila superior: Configuración Nequi del Administrador */}
+          <div className="glass-container" style={{ padding: '20px' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Wallet style={{ color: 'var(--primary)' }} /> Configuración Nequi del Administrador
+            </h2>
+            <form onSubmit={handleUpdateSettings} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', alignItems: 'end' }}>
+              <div className="form-group" style={{ marginBottom: 0, flex: '1', minWidth: '200px' }}>
+                <label className="form-label">Celular Nequi para recibir pagos</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={adminNequiPhone}
+                  onChange={(e) => setAdminNequiPhone(e.target.value)}
+                  placeholder="Ej. 3219876543"
+                  required
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0, flex: '2', minWidth: '300px' }}>
+                <label className="form-label">URL del Código QR de tu Nequi (opcional)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={adminNequiQrUrl}
+                  onChange={(e) => setAdminNequiQrUrl(e.target.value)}
+                  placeholder="Enlace de imagen de tu código QR de Nequi"
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ height: '45px', width: 'auto', padding: '0 24px' }}>
+                Guardar Configuración
+              </button>
+            </form>
+          </div>
+
+          <div className="admin-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+            
+            {/* PANEL DE SOLICITUDES DE RECARGAS (DEPÓSITOS) */}
+            <div className="glass-container" style={{ padding: '20px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
+                📥 Solicitudes de Recargas Pendientes
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Usuario</th>
+                      <th>Monto</th>
+                      <th>Referencia Nequi</th>
+                      <th>Fecha</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {walletTransactions
+                      .filter(t => t.type === 'deposit' && t.status === 'pending')
+                      .map(tx => (
+                        <tr key={tx.id}>
+                          <td>
+                            <strong style={{ color: 'white' }}>{tx.profiles?.display_name}</strong>
+                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tx.profiles?.department}</span>
+                          </td>
+                          <td style={{ color: 'var(--primary)', fontWeight: 'bold' }}>
+                            ${tx.amount?.toLocaleString('es-CO')}
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {tx.details || 'Sin referencia'}
+                          </td>
+                          <td style={{ fontSize: '0.8rem' }}>
+                            {new Date(tx.created_at).toLocaleDateString('es-CO')}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto' }}
+                                disabled={processingTx[tx.id]}
+                                onClick={() => handleProcessTransaction(tx.id, 'approved')}
+                              >
+                                Aprobar
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto', color: 'var(--accent-red)' }}
+                                disabled={processingTx[tx.id]}
+                                onClick={() => handleProcessTransaction(tx.id, 'rejected')}
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {walletTransactions.filter(t => t.type === 'deposit' && t.status === 'pending').length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '15px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                          No hay solicitudes de recarga pendientes.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* PANEL DE SOLICITUDES DE RETIROS */}
+            <div className="glass-container" style={{ padding: '20px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-red)' }}>
+                📤 Solicitudes de Retiros Pendientes
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Usuario</th>
+                      <th>Monto</th>
+                      <th>Nequi Destino</th>
+                      <th>Fecha</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {walletTransactions
+                      .filter(t => t.type === 'withdrawal' && t.status === 'pending')
+                      .map(tx => (
+                        <tr key={tx.id}>
+                          <td>
+                            <strong style={{ color: 'white' }}>{tx.profiles?.display_name}</strong>
+                            <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tx.profiles?.department}</span>
+                          </td>
+                          <td style={{ color: 'var(--accent-red)', fontWeight: 'bold' }}>
+                            -${tx.amount?.toLocaleString('es-CO')}
+                          </td>
+                          <td style={{ color: 'white', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                            {tx.details || tx.profiles?.nequi_phone || 'No registrado'}
+                          </td>
+                          <td style={{ fontSize: '0.8rem' }}>
+                            {new Date(tx.created_at).toLocaleDateString('es-CO')}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto', background: 'var(--accent-blue)', borderColor: 'var(--accent-blue)' }}
+                                disabled={processingTx[tx.id]}
+                                onClick={() => handleProcessTransaction(tx.id, 'completed')}
+                              >
+                                Transferido
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 8px', fontSize: '0.75rem', width: 'auto', color: 'var(--accent-red)' }}
+                                disabled={processingTx[tx.id]}
+                                onClick={() => handleProcessTransaction(tx.id, 'rejected')}
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {walletTransactions.filter(t => t.type === 'withdrawal' && t.status === 'pending').length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '15px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                          No hay solicitudes de retiro pendientes.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+          {/* HISTORIAL GLOBAL DE TRANSACCIONES */}
+          <div className="glass-container" style={{ padding: '20px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', color: 'white' }}>
+              📜 Historial Reciente de Movimientos (Todos los Usuarios)
+            </h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Tipo</th>
+                    <th>Monto</th>
+                    <th>Detalles / Referencia</th>
+                    <th>Estado</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {walletTransactions
+                    .slice(0, 50)
+                    .map(tx => {
+                      const typeLabel = 
+                        tx.type === 'deposit' ? 'Recarga Nequi' :
+                        tx.type === 'withdrawal' ? 'Retiro Ganancia' :
+                        tx.type === 'bet_placed' ? 'Apuesta Realizada' :
+                        tx.type === 'bet_won' ? 'Apuesta Ganada' :
+                        tx.type === 'bet_refund' ? 'Reembolso Apuesta' :
+                        tx.type === 'p2p_placed' ? 'Duelo 1v1 Aceptado' :
+                        tx.type === 'p2p_win' ? 'Duelo 1v1 Ganado' : 'Reembolso';
+
+                      const statusLabel = 
+                        tx.status === 'pending' ? 'Pendiente' :
+                        tx.status === 'approved' ? 'Aprobado' :
+                        tx.status === 'rejected' ? 'Rechazado' : 'Completado';
+
+                      const statusColor = 
+                        tx.status === 'pending' ? 'var(--secondary)' :
+                        tx.status === 'rejected' ? 'var(--accent-red)' : 'var(--primary)';
+
+                      return (
+                        <tr key={tx.id}>
+                          <td>
+                            <strong style={{ color: 'white' }}>{tx.profiles?.display_name}</strong>
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>{tx.profiles?.department}</span>
+                          </td>
+                          <td style={{ fontSize: '0.85rem' }}>{typeLabel}</td>
+                          <td style={{
+                            fontWeight: 'bold',
+                            color: tx.type === 'deposit' || tx.type === 'bet_won' || tx.type === 'p2p_win' || tx.type === 'bet_refund' ? 'var(--primary)' : 'var(--accent-red)'
+                          }}>
+                            {tx.type === 'deposit' || tx.type === 'bet_won' || tx.type === 'p2p_win' || tx.type === 'bet_refund' ? '+' : '-'}${tx.amount?.toLocaleString('es-CO')}
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{tx.details || '-'}</td>
+                          <td style={{ color: statusColor, fontWeight: 'bold', fontSize: '0.85rem' }}>{statusLabel}</td>
+                          <td style={{ fontSize: '0.8rem' }}>{new Date(tx.created_at).toLocaleString('es-CO')}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       )}
     </div>

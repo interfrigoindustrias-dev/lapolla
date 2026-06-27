@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import Instructions from './Instructions';
 import ChatWall from './ChatWall';
 import Confetti from './Confetti';
-import { Trophy, Calendar, Check, Play, Lock, Users, PlusCircle, LogIn, DollarSign, Sparkles, Send, Info, BookOpen, Award, CheckCircle2, XCircle, ArrowRight, Activity, Zap, Bell } from 'lucide-react';
+import { Trophy, Calendar, Check, Play, Lock, Users, PlusCircle, LogIn, DollarSign, Sparkles, Send, Info, BookOpen, Award, CheckCircle2, XCircle, ArrowRight, Activity, Zap, Bell, Wallet } from 'lucide-react';
 
 const renderTeamIcon = (teamName, teamIcon) => {
   if (!teamIcon) {
@@ -81,6 +81,15 @@ export default function Dashboard({ onSelectPool }) {
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [actionError, setActionError] = useState('');
   const [selectedProfileId, setSelectedProfileId] = useState(null);
+
+  // Estados para Billetera Nequi
+  const [walletTransactions, setWalletTransactions] = useState([]);
+  const [walletAmount, setWalletAmount] = useState('10000');
+  const [nequiReference, setNequiReference] = useState('');
+  const [nequiPhoneInput, setNequiPhoneInput] = useState('');
+  const [appSettings, setAppSettings] = useState({ admin_nequi_phone: '3000000000', admin_nequi_qr_url: '' });
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletMode, setWalletMode] = useState('deposit'); // deposit | withdrawal
 
   useEffect(() => {
     fetchMatches();
@@ -236,7 +245,7 @@ export default function Dashboard({ onSelectPool }) {
     try {
       const { data: profiles, error: pError } = await supabase
         .from('profiles')
-        .select('id, display_name, department');
+        .select('id, display_name, department, balance, nequi_phone');
 
       const { data: preds, error: prError } = await supabase
         .from('predictions')
@@ -790,6 +799,141 @@ export default function Dashboard({ onSelectPool }) {
     }
   };
 
+  // --- FUNCIONES DE BILLETERA ---
+  const fetchWalletTransactions = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching transactions:', error);
+    } else {
+      setWalletTransactions(data || []);
+    }
+  };
+
+  const fetchAppSettings = async () => {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (error) {
+      console.error('Error fetching settings:', error);
+    } else if (data) {
+      setAppSettings(data);
+    }
+  };
+
+  const handleRequestDeposit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    setWalletLoading(true);
+
+    const amountNum = parseFloat(walletAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Por favor ingresa un monto válido.');
+      setWalletLoading(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('wallet_transactions')
+      .insert({
+        user_id: user.id,
+        type: 'deposit',
+        amount: amountNum,
+        status: 'pending',
+        details: nequiReference || 'Transferencia Nequi'
+      });
+
+    if (error) {
+      alert('Error registrando recarga: ' + error.message);
+    } else {
+      alert('Solicitud de recarga enviada con éxito. Esperando aprobación del administrador.');
+      setNequiReference('');
+      fetchWalletTransactions();
+    }
+    setWalletLoading(false);
+  };
+
+  const handleRequestWithdrawal = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    setWalletLoading(true);
+
+    const amountNum = parseFloat(walletAmount);
+    const myProfile = leaderboard.find(l => l.id === user.id);
+    const currentBalance = myProfile?.balance || 0;
+
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Por favor ingresa un monto válido.');
+      setWalletLoading(false);
+      return;
+    }
+
+    if (currentBalance < amountNum) {
+      alert(`Saldo insuficiente en tu billetera. Tu saldo actual es $${currentBalance.toLocaleString('es-CO')}`);
+      setWalletLoading(false);
+      return;
+    }
+
+    if (!nequiPhoneInput) {
+      alert('Por favor ingresa tu número de celular Nequi para recibir la transferencia.');
+      setWalletLoading(false);
+      return;
+    }
+
+    // Guardar su Nequi Phone en profiles
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ nequi_phone: nequiPhoneInput })
+      .eq('id', user.id);
+
+    if (profileError) {
+      console.error('Error updating nequi phone:', profileError);
+    }
+
+    const { error } = await supabase
+      .from('wallet_transactions')
+      .insert({
+        user_id: user.id,
+        type: 'withdrawal',
+        amount: amountNum,
+        status: 'pending',
+        details: `Retirar a Nequi: ${nequiPhoneInput}`
+      });
+
+    if (error) {
+      alert('Error registrando retiro: ' + error.message);
+    } else {
+      alert('Solicitud de retiro enviada con éxito. El administrador realizará la transferencia a tu Nequi.');
+      fetchWalletTransactions();
+      fetchLeaderboard(); // Recargar saldo local
+    }
+    setWalletLoading(false);
+  };
+
+  useEffect(() => {
+    if (user && activeTab === 'wallet') {
+      fetchWalletTransactions();
+      fetchAppSettings();
+    }
+  }, [user, activeTab]);
+
+  useEffect(() => {
+    if (user) {
+      const myProfile = leaderboard.find(l => l.id === user.id);
+      if (myProfile?.nequi_phone) {
+        setNequiPhoneInput(myProfile.nequi_phone);
+      }
+    }
+  }, [leaderboard, user]);
+
   // --- FUNCIONES DE GAMIFICACIÓN Y ESTADÍSTICAS ---
   const getUserTotalGains = (userId) => {
     const matchGains = allPredictionsData
@@ -1022,6 +1166,13 @@ export default function Dashboard({ onSelectPool }) {
             Mis Pollas ({pools.length})
           </button>
           <button 
+            className={`tab ${activeTab === 'wallet' ? 'active' : ''}`}
+            onClick={() => setActiveTab('wallet')}
+          >
+            <Wallet size={18} style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }} />
+            Billetera Nequi
+          </button>
+          <button 
             className={`tab ${activeTab === 'instructions' ? 'active' : ''}`}
             onClick={() => setActiveTab('instructions')}
           >
@@ -1052,6 +1203,13 @@ export default function Dashboard({ onSelectPool }) {
           >
             <Trophy />
             <span>Posiciones</span>
+          </button>
+          <button 
+            className={`bottom-nav-item ${activeTab === 'wallet' ? 'active' : ''}`}
+            onClick={() => setActiveTab('wallet')}
+          >
+            <Wallet />
+            <span>Billetera</span>
           </button>
           <button 
             className={`bottom-nav-item ${activeTab === 'pools' ? 'active' : ''}`}
@@ -2048,6 +2206,233 @@ export default function Dashboard({ onSelectPool }) {
           </div>
         )}
 
+        {/* 6. BILLETERA NEQUI */}
+        {activeTab === 'wallet' && (() => {
+          const myProfile = leaderboard.find(l => l.id === user?.id);
+          const currentBalance = myProfile?.balance || 0;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* Tarjeta de Saldos */}
+              <div className="glass-container" style={{
+                padding: '25px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '20px',
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(59, 130, 246, 0.05))',
+                border: '1px solid rgba(16, 185, 129, 0.15)'
+              }}>
+                <div>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Saldo Disponible en tu Billetera
+                  </span>
+                  <h2 style={{ fontSize: '2.2rem', fontWeight: 900, color: 'var(--primary)', margin: '5px 0 0 0' }}>
+                    ${currentBalance.toLocaleString('es-CO')} COP
+                  </h2>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className={`btn ${walletMode === 'deposit' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ width: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
+                    onClick={() => setWalletMode('deposit')}
+                  >
+                    Recargar con Nequi
+                  </button>
+                  <button
+                    className={`btn ${walletMode === 'withdrawal' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ width: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
+                    onClick={() => setWalletMode('withdrawal')}
+                  >
+                    Retirar Ganancias
+                  </button>
+                </div>
+              </div>
+
+              {/* Formulario Dinámico */}
+              <div className="glass-container" style={{ padding: '20px' }}>
+                {walletMode === 'deposit' ? (
+                  <div>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
+                      📥 Registrar Recarga por Nequi
+                    </h3>
+                    
+                    <div style={{
+                      background: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--border-color)',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      lineHeight: '1.6',
+                      marginBottom: '20px'
+                    }}>
+                      <strong style={{ color: 'white', display: 'block', marginBottom: '6px' }}>Pasos para recargar:</strong>
+                      1. Envía tu transferencia Nequi al celular del Administrador: <strong style={{ color: 'var(--primary)', fontSize: '1rem' }}>{appSettings.admin_nequi_phone}</strong>.<br />
+                      {appSettings.admin_nequi_qr_url && (
+                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          <span>O escanea este código QR desde tu app Nequi:</span>
+                          <img src={appSettings.admin_nequi_qr_url} alt="QR Nequi" style={{ maxWidth: '180px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                        </div>
+                      )}
+                      2. Ingresa abajo el valor enviado y la referencia o número celular Nequi titular de la transferencia.<br />
+                      3. Presiona **"Registrar Recarga"** y espera que el administrador verifique y apruebe tu saldo.
+                    </div>
+
+                    <form onSubmit={handleRequestDeposit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', alignItems: 'end' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Monto a Recargar ($)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          min="1000"
+                          value={walletAmount}
+                          onChange={(e) => setWalletAmount(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Referencia / Celular Nequi Origen</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Tu celular Nequi o ref. transferencia"
+                          value={nequiReference}
+                          onChange={(e) => setNequiReference(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary" style={{ height: '45px' }} disabled={walletLoading}>
+                        {walletLoading ? 'Enviando...' : 'Registrar Recarga'}
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
+                      📤 Solicitar Retiro de Ganancias
+                    </h3>
+
+                    <div style={{
+                      background: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--border-color)',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      lineHeight: '1.6',
+                      marginBottom: '20px'
+                    }}>
+                      <strong style={{ color: 'white', display: 'block', marginBottom: '6px' }}>Pasos para retirar:</strong>
+                      1. El dinero solicitado será debitado de forma preventiva de tu saldo disponible.<br />
+                      2. El administrador recibirá la solicitud y te transferirá el dinero a tu cuenta Nequi registrada.<br />
+                      3. Una vez transferido, se marcará tu solicitud como **"Completado"**. Si el retiro es rechazado, tu saldo será reembolsado de inmediato.
+                    </div>
+
+                    <form onSubmit={handleRequestWithdrawal} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', alignItems: 'end' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Monto a Retirar ($)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          max={currentBalance}
+                          min="1000"
+                          value={walletAmount}
+                          onChange={(e) => setWalletAmount(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Tu Número de Nequi Destino</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Ej. 3123456789"
+                          value={nequiPhoneInput}
+                          onChange={(e) => setNequiPhoneInput(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-primary" style={{ height: '45px', background: 'var(--accent-blue)', borderColor: 'var(--accent-blue)' }} disabled={walletLoading}>
+                        {walletLoading ? 'Procesando...' : 'Solicitar Retiro'}
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+
+              {/* Historial de Movimientos de la Billetera */}
+              <div className="glass-container" style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', color: 'white' }}>
+                  📜 Historial de Movimientos
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {walletTransactions.map(tx => {
+                    const typeLabel = 
+                      tx.type === 'deposit' ? 'Recarga Nequi' :
+                      tx.type === 'withdrawal' ? 'Retiro solicitado' :
+                      tx.type === 'bet_placed' ? 'Apuesta Realizada' :
+                      tx.type === 'bet_won' ? 'Apuesta Ganada' :
+                      tx.type === 'bet_refund' ? 'Reembolso de Apuesta' :
+                      tx.type === 'p2p_placed' ? 'Duelo 1v1 Aceptado' :
+                      tx.type === 'p2p_win' ? 'Duelo 1v1 Ganado' : 'Reembolso';
+
+                    const statusLabel = 
+                      tx.status === 'pending' ? 'Pendiente Aprobación' :
+                      tx.status === 'approved' ? 'Recarga Aprobada' :
+                      tx.status === 'rejected' ? 'Rechazado' : 'Completado';
+
+                    const isAdd = tx.type === 'deposit' || tx.type === 'bet_won' || tx.type === 'p2p_win' || tx.type === 'bet_refund';
+                    const statusColor = 
+                      tx.status === 'pending' ? 'var(--secondary)' :
+                      tx.status === 'rejected' ? 'var(--accent-red)' : 'var(--primary)';
+
+                    return (
+                      <div key={tx.id} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 15px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem'
+                      }}>
+                        <div>
+                          <strong style={{ color: 'white', display: 'block' }}>{typeLabel}</strong>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            {new Date(tx.created_at).toLocaleString('es-CO')} | Ref: {tx.details || '-'}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{
+                            display: 'block',
+                            fontWeight: 'bold',
+                            fontSize: '1rem',
+                            color: isAdd ? 'var(--primary)' : 'var(--accent-red)'
+                          }}>
+                            {isAdd ? '+' : '-'}${tx.amount?.toLocaleString('es-CO')}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: statusColor, fontWeight: 'bold' }}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {walletTransactions.length === 0 && (
+                    <p style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
+                      No tienes movimientos registrados en tu billetera.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          );
+        })()}
+
         {/* 5. INSTRUCTIVO */}
         {activeTab === 'instructions' && <Instructions isAdmin={profile?.is_admin} />}
       </div>
@@ -2061,14 +2446,18 @@ export default function Dashboard({ onSelectPool }) {
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{user?.email}</p>
             <p style={{ color: 'var(--primary)', fontSize: '0.85rem', fontWeight: 'bold' }}>Área: {profile?.department}</p>
           </div>
-          <div style={{ borderTop: '1px solid var(--border-color)', width: '100%', paddingTop: '15px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{ borderTop: '1px solid var(--border-color)', width: '100%', paddingTop: '15px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
             <div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>{myPainsAndGains?.points || 0}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Puntos</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary)' }}>{myPainsAndGains?.points || 0}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Puntos</div>
             </div>
             <div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--secondary)' }}>${myPainsAndGains?.totalGain?.toLocaleString() || 0}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ganado ($)</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--secondary)' }}>${myPainsAndGains?.totalGain?.toLocaleString() || 0}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ganado</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary)' }}>${(leaderboard.find(l => l.id === user?.id)?.balance || 0).toLocaleString()}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Billetera</div>
             </div>
           </div>
         </div>
