@@ -1225,6 +1225,34 @@ export default function Dashboard({ onSelectPool }) {
                         );
                       })()}
                     </div>
+
+                    {/* MENSAJE DE RECLAMAR PREMIO SI GANÓ EL PARTIDO */}
+                    {pred && match.status === 'finished' && pred.gain > 0 && (
+                      <div style={{
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.2)',
+                        color: '#a7f3d0',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        margin: '12px 0 0 0',
+                        fontSize: '0.85rem',
+                        textAlign: 'left',
+                        lineHeight: '1.5',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', color: '#34d399' }}>
+                          🎉 ¡Felicidades, ganaste esta apuesta!
+                        </div>
+                        <div>
+                          Acertaste en este partido y tu premio de la bolsa es de <strong>${pred.gain.toLocaleString('es-CO')} COP</strong>. 
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          *Comunícate con el administrador para reclamar tu saldo en efectivo o transferencia.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -1466,6 +1494,34 @@ export default function Dashboard({ onSelectPool }) {
                               </div>
                             );
                           })()}
+
+                          {/* MENSAJE DE RECLAMAR PREMIO SI GANÓ APUESTA ESPECIAL */}
+                          {resolved && pred && pred.gain > 0 && (
+                            <div style={{
+                              background: 'rgba(16, 185, 129, 0.1)',
+                              border: '1px solid rgba(16, 185, 129, 0.2)',
+                              color: '#a7f3d0',
+                              padding: '12px 16px',
+                              borderRadius: '8px',
+                              margin: '12px 0 0 0',
+                              fontSize: '0.85rem',
+                              textAlign: 'left',
+                              lineHeight: '1.5',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', color: '#34d399' }}>
+                                🎉 ¡Felicidades, ganaste esta apuesta especial!
+                              </div>
+                              <div>
+                                Tu respuesta fue la ganadora de la apuesta especial y tu premio es de <strong>${pred.gain.toLocaleString('es-CO')} COP</strong>. 
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                *Comunícate con el administrador para reclamar tu saldo en efectivo o transferencia.
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })
@@ -1549,34 +1605,64 @@ export default function Dashboard({ onSelectPool }) {
                   {p2pChallenges.map(challenge => {
                     const isMeChallenger = challenge.challenger_id === user.id;
                     const opponentName = isMeChallenger ? challenge.challenged?.display_name : challenge.challenger?.display_name;
-                    const myPredictionText = challenge.challenger_prediction === 'team_a' ? 'Gana local' : challenge.challenger_prediction === 'team_b' ? 'Gana visitante' : 'Empate';
                     const matchText = challenge.matches ? `${challenge.matches.team_a} vs ${challenge.matches.team_b}` : 'Partido';
 
                     return (
-                      <div key={challenge.id} className="glass-container" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-                        <div>
-                          <div style={{ fontWeight: 'bold', color: 'white' }}>Duelo contra <strong>{opponentName}</strong></div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>Partido: {matchText} | Monto: <strong>${challenge.amount?.toLocaleString()}</strong></div>
-                        </div>
-                        <div>
-                          {challenge.status === 'pending' ? (
-                            !isMeChallenger ? (
-                              <div style={{ display: 'flex', gap: '10px' }}>
-                                <button className="btn btn-primary" style={{ padding: '6px 12px', width: 'auto', fontSize: '0.8rem' }} onClick={() => handleAcceptChallenge(challenge.id)}>Aceptar</button>
-                                <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto', fontSize: '0.8rem', color: 'var(--accent-red)' }} onClick={() => handleRejectChallenge(challenge.id)}>Rechazar</button>
+                      <div key={challenge.id} className="glass-container" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', width: '100%' }}>
+                          <div>
+                            <div style={{ fontWeight: 'bold', color: 'white' }}>Duelo contra <strong>{opponentName}</strong></div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>Partido: {matchText} | Monto: <strong>${challenge.amount?.toLocaleString()}</strong></div>
+                          </div>
+                          <div>
+                            {challenge.status === 'pending' ? (
+                              !isMeChallenger ? (
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                  <button className="btn btn-primary" style={{ padding: '6px 12px', width: 'auto', fontSize: '0.8rem' }} onClick={() => handleAcceptChallenge(challenge.id)}>Aceptar</button>
+                                  <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto', fontSize: '0.8rem', color: 'var(--accent-red)' }} onClick={() => handleRejectChallenge(challenge.id)}>Rechazar</button>
+                                </div>
+                              ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enviado...</span>
+                            ) : challenge.status === 'accepted' ? (
+                              <span style={{ color: 'var(--secondary)', fontSize: '0.85rem', fontWeight: 'bold' }}>Activo</span>
+                            ) : challenge.status === 'rejected' ? (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Rechazado</span>
+                            ) : (
+                              <div style={{ fontSize: '0.85rem', textAlign: 'right' }}>
+                                <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Resuelto</span><br />
+                                <span>Ganador: <strong>{challenge.winner_id === user.id ? 'Tú (+$' + challenge.amount.toLocaleString() + ')' : opponentName}</strong></span>
                               </div>
-                            ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Enviado...</span>
-                          ) : challenge.status === 'accepted' ? (
-                            <span style={{ color: 'var(--secondary)', fontSize: '0.85rem', fontWeight: 'bold' }}>Activo</span>
-                          ) : challenge.status === 'rejected' ? (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Rechazado</span>
-                          ) : (
-                            <div style={{ fontSize: '0.85rem', textAlign: 'right' }}>
-                              <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Resuelto</span><br />
-                              <span>Ganador: <strong>{challenge.winner_id === user.id ? 'Tú (+$' + challenge.amount.toLocaleString() + ')' : opponentName}</strong></span>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
+
+                        {/* MENSAJE DE RECLAMAR PREMIO SI GANÓ EL DUELO 1v1 */}
+                        {challenge.status === 'resolved' && challenge.winner_id === user.id && (
+                          <div style={{
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            border: '1px solid rgba(16, 185, 129, 0.2)',
+                            color: '#a7f3d0',
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            fontSize: '0.85rem',
+                            textAlign: 'left',
+                            lineHeight: '1.5',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            width: '100%',
+                            boxSizing: 'border-box'
+                          }}>
+                            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', color: '#34d399' }}>
+                              🎉 ¡Ganaste el duelo 1v1!
+                            </div>
+                            <div>
+                              Venciste a {opponentName} en este partido y ganaste <strong>${challenge.amount.toLocaleString('es-CO')} COP</strong>. 
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                              *Comunícate con el administrador para cobrar tu saldo ganado.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
