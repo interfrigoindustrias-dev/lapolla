@@ -80,6 +80,7 @@ export default function Dashboard({ onSelectPool }) {
   const [newPoolFee, setNewPoolFee] = useState('0');
   const [joinInviteCode, setJoinInviteCode] = useState('');
   const [actionError, setActionError] = useState('');
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
 
   useEffect(() => {
     fetchMatches();
@@ -787,6 +788,192 @@ export default function Dashboard({ onSelectPool }) {
     } catch (err) {
       setActionError(err.message || 'Error');
     }
+  };
+
+  // --- FUNCIONES DE GAMIFICACIÓN Y ESTADÍSTICAS ---
+  const getUserTotalGains = (userId) => {
+    const matchGains = allPredictionsData
+      .filter(p => p.user_id === userId)
+      .reduce((sum, p) => sum + (p.gain || 0), 0);
+
+    const customGains = allCustomPredictionsData
+      .filter(p => p.user_id === userId)
+      .reduce((sum, p) => sum + (p.gain || 0), 0);
+
+    const p2pGains = p2pChallenges
+      .filter(c => c.status === 'resolved' && c.winner_id === userId)
+      .reduce((sum, c) => sum + (c.amount || 0), 0);
+
+    return matchGains + customGains + p2pGains;
+  };
+
+  const getUserBadges = (userId) => {
+    const badges = [];
+    if (!userId) return badges;
+
+    const userProfile = leaderboard.find(l => l.id === userId);
+    if (!userProfile) return badges;
+
+    // 1. 🔮 El Nostradamus (3 pts con consenso < 20%)
+    const userPreds = allPredictionsData.filter(p => p.user_id === userId);
+    let hasNostradamus = false;
+
+    userPreds.forEach(up => {
+      if (up.points_earned === 3) {
+        const matchPreds = allPredictionsData.filter(p => p.match_id === up.match_id);
+        const totalMatchPreds = matchPreds.length;
+        if (totalMatchPreds > 0) {
+          const sameScoreCount = matchPreds.filter(p => p.pred_score_a === up.pred_score_a && p.pred_score_b === up.pred_score_b).length;
+          if (sameScoreCount / totalMatchPreds < 0.20) {
+            hasNostradamus = true;
+          }
+        }
+      }
+    });
+
+    if (hasNostradamus) {
+      badges.push({
+        id: 'nostradamus',
+        name: 'El Nostradamus',
+        emoji: '🔮',
+        description: 'Acertó un marcador exacto muy difícil (adivinado por menos del 20% de la oficina).'
+      });
+    }
+
+    // 2. ⚔️ El Verdugo (Racha de 3+ victorias consecutivas 1v1)
+    const userChallenges = p2pChallenges.filter(c => 
+      c.status === 'resolved' && (c.challenger_id === userId || c.challenged_id === userId)
+    );
+    userChallenges.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    
+    let maxStreak = 0;
+    let currentStreak = 0;
+    userChallenges.forEach(c => {
+      if (c.winner_id === userId) {
+        currentStreak += 1;
+        if (currentStreak > maxStreak) {
+          maxStreak = currentStreak;
+        }
+      } else {
+        currentStreak = 0;
+      }
+    });
+
+    if (maxStreak >= 3) {
+      badges.push({
+        id: 'verdugo',
+        name: 'El Verdugo',
+        emoji: '⚔️',
+        description: `Racha legendaria de 1v1. Logró ganar ${maxStreak} duelos consecutivos contra sus compañeros.`
+      });
+    }
+
+    // 3. 👑 Padre del Área (Líder del departamento en puntos)
+    const dept = userProfile.department;
+    if (dept && dept !== 'Otros' && dept !== 'ninguno') {
+      const deptMembers = leaderboard.filter(l => l.department === dept);
+      if (deptMembers.length >= 2) {
+        const deptPoints = deptMembers.map(m => {
+          const pts = allPredictionsData
+            .filter(p => p.user_id === m.id)
+            .reduce((sum, p) => sum + (p.points_earned || 0), 0);
+          return { id: m.id, points: pts };
+        });
+        
+        deptPoints.sort((a, b) => b.points - a.points);
+        const myPoints = deptPoints.find(dp => dp.id === userId)?.points || 0;
+        
+        if (deptPoints[0].id === userId && myPoints > 0 && deptPoints[0].points > deptPoints[1].points) {
+          badges.push({
+            id: 'padre_area',
+            name: 'Padre del Área',
+            emoji: '👑',
+            description: `Líder indiscutible de su departamento (${dept}) en la tabla general de posiciones.`
+          });
+        }
+      }
+    }
+
+    // 4. 💰 Rey de la Bolsa (Ganancias totales >= 50.000 COP)
+    const totalGains = getUserTotalGains(userId);
+    if (totalGains >= 50000) {
+      badges.push({
+        id: 'rey_bolsa',
+        name: 'Rey de la Bolsa',
+        emoji: '💰',
+        description: `Ha acumulado más de $${totalGains.toLocaleString('es-CO')} COP en ganancias de las pollas de la oficina.`
+      });
+    }
+
+    return badges;
+  };
+
+  const getPlayerProfileStats = (profileId) => {
+    if (!profileId) return null;
+
+    const profile = leaderboard.find(l => l.id === profileId);
+    if (!profile) return null;
+
+    const userPreds = allPredictionsData.filter(p => p.user_id === profileId);
+    const totalPreds = userPreds.length;
+    const exactGuessed = userPreds.filter(p => p.points_earned === 3).length;
+    const exactPercent = totalPreds > 0 ? Math.round((exactGuessed / totalPreds) * 100) : 0;
+
+    const totalGain = getUserTotalGains(profileId);
+
+    const resolvedChallenges = p2pChallenges.filter(c => 
+      c.status === 'resolved' && (c.challenger_id === profileId || c.challenged_id === profileId)
+    );
+    const p2pWins = resolvedChallenges.filter(c => c.winner_id === profileId).length;
+    const p2pLosses = resolvedChallenges.length - p2pWins;
+
+    const p2pNetGains = p2pChallenges
+      .filter(c => c.status === 'resolved')
+      .reduce((sum, c) => {
+        if (c.winner_id === profileId) return sum + (c.amount || 0);
+        if (c.challenger_id === profileId || c.challenged_id === profileId) return sum - (c.amount || 0);
+        return sum;
+      }, 0);
+
+    const badges = getUserBadges(profileId);
+    const rank = leaderboard.findIndex(l => l.id === profileId) + 1;
+
+    return {
+      profile,
+      totalPreds,
+      exactGuessed,
+      exactPercent,
+      totalGain,
+      p2pWins,
+      p2pLosses,
+      p2pNetGains,
+      badges,
+      rank
+    };
+  };
+
+  const getH2hStats = (rivalId) => {
+    if (!rivalId || !user) return null;
+
+    const duals = p2pChallenges.filter(c => 
+      c.status === 'resolved' && 
+      ((c.challenger_id === user.id && c.challenged_id === rivalId) || 
+       (c.challenged_id === user.id && c.challenger_id === rivalId))
+    );
+
+    const myWins = duals.filter(c => c.winner_id === user.id).length;
+    const rivalWins = duals.filter(c => c.winner_id === rivalId).length;
+    const total = duals.length;
+
+    const rivalProfile = allProfiles.find(p => p.id === rivalId);
+    const rivalName = rivalProfile?.display_name || 'Compañero';
+
+    return {
+      myWins,
+      rivalWins,
+      total,
+      rivalName
+    };
   };
 
   const activeLeaderboard = getLeaderboardToShow();
@@ -1599,6 +1786,59 @@ export default function Dashboard({ onSelectPool }) {
                     </div>
                     <button type="submit" className="btn btn-primary" style={{ height: '45px' }} disabled={p2pLoading}>Retar</button>
                   </form>
+
+                  {/* CARD H2H DE RIVALIDAD */}
+                  {p2pOpponentId && (() => {
+                    const h2h = getH2hStats(p2pOpponentId);
+                    if (!h2h) return null;
+
+                    const winRate = h2h.total > 0 ? Math.round((h2h.myWins / h2h.total) * 100) : 50;
+
+                    return (
+                      <div style={{
+                        padding: '12px 16px',
+                        marginTop: '15px',
+                        background: 'rgba(0,0,0,0.15)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: 'white' }}>
+                          <span>⚔️ Historial Cara a Cara (H2H)</span>
+                          <span style={{ color: 'var(--secondary)' }}>{h2h.total} Duelos Resueltos</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px', marginTop: '4px' }}>
+                          <div style={{ textAlign: 'left' }}>
+                            <span style={{ color: 'var(--primary)', fontWeight: 'bold', fontSize: '1rem' }}>Tú: {h2h.myWins}</span>
+                          </div>
+                          
+                          {/* Barra de Progreso H2H */}
+                          <div style={{ flex: '1', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', display: 'flex' }}>
+                            <div style={{ width: `${winRate}%`, background: 'var(--primary)' }}></div>
+                            <div style={{ width: `${100 - winRate}%`, background: 'var(--accent-red)' }}></div>
+                          </div>
+
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ color: 'var(--accent-red)', fontWeight: 'bold', fontSize: '1rem' }}>{h2h.rivalName}: {h2h.rivalWins}</span>
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', marginTop: '2px' }}>
+                          {h2h.total === 0 
+                            ? 'Aún no se han enfrentado. ¡Es hora de lanzar el primer desafío!' 
+                            : h2h.myWins > h2h.rivalWins 
+                              ? '🔥 ¡Llevas la ventaja en la rivalidad! Mantenla.' 
+                              : h2h.myWins < h2h.rivalWins 
+                                ? '💀 ¡Vas abajo en el historial! Lanza este reto para cobrar venganza.' 
+                                : '⚖️ Historial empatado. ¡Este duelo decidirá quién manda!'}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -1736,7 +1976,23 @@ export default function Dashboard({ onSelectPool }) {
                       <span className={`leaderboard-rank rank-${index + 1}`}>{index + 1}</span>
                       <div className="avatar-circle" style={index === 0 ? { background: 'var(--secondary)' } : {}}>{item.display_name.substring(0,2).toUpperCase()}</div>
                       <div>
-                        <span className="leaderboard-name">{item.display_name} {item.id === user.id && '(Tú)'}</span>
+                        <span className="leaderboard-name">
+                          <a 
+                            href="#" 
+                            onClick={(e) => { e.preventDefault(); setSelectedProfileId(item.id); }} 
+                            style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer', borderBottom: '1px dashed rgba(255,255,255,0.2)' }}
+                            title="Ver perfil y medallas"
+                          >
+                            {item.display_name}
+                          </a>
+                          {item.id === user.id && ' (Tú)'}
+                          {(() => {
+                            const badges = getUserBadges(item.id);
+                            return badges.map(b => (
+                              <span key={b.id} style={{ marginLeft: '4px' }} title={b.name}>{b.emoji}</span>
+                            ));
+                          })()}
+                        </span>
                         <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Área: {item.department}</span>
                       </div>
                     </div>
@@ -1820,6 +2076,178 @@ export default function Dashboard({ onSelectPool }) {
         {/* Muro de Burlas en vivo general */}
         <ChatWall />
       </div>
+
+      {/* MODAL PERFIL JUGADOR */}
+      {selectedProfileId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }} onClick={() => setSelectedProfileId(null)}>
+          <div className="glass-container" style={{
+            maxWidth: '480px',
+            width: '100%',
+            padding: '30px',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            background: 'rgba(10, 15, 30, 0.95)',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Close Button */}
+            <button
+              onClick={() => setSelectedProfileId(null)}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                right: '15px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '1.2rem'
+              }}
+            >
+              ✕
+            </button>
+
+            {(() => {
+              const stats = getPlayerProfileStats(selectedProfileId);
+              if (!stats) return <p style={{ color: 'var(--text-muted)' }}>Cargando perfil...</p>;
+
+              const initials = stats.profile.display_name?.substring(0, 2).toUpperCase() || 'P';
+
+              return (
+                <>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, var(--primary), var(--accent-blue))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.5rem',
+                      fontWeight: 800,
+                      color: 'white',
+                      boxShadow: '0 0 15px var(--primary-glow)'
+                    }}>
+                      {initials}
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', margin: 0 }}>
+                        {stats.profile.display_name}
+                      </h2>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                        Área: <strong>{stats.profile.department || 'Sin asignar'}</strong> | Puesto: <strong>#{stats.rank}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Medallas/Logros */}
+                  <div>
+                    <h3 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.05em' }}>
+                      Logros Obtenidos ({stats.badges.length})
+                    </h3>
+                    {stats.badges.length === 0 ? (
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
+                        Ninguno de los logros ha sido desbloqueado todavía.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {stats.badges.map(badge => (
+                          <div key={badge.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            background: 'rgba(255,255,255,0.02)',
+                            border: '1px solid var(--border-color)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            fontSize: '0.85rem'
+                          }} title={badge.description}>
+                            <span style={{ fontSize: '1.5rem' }}>{badge.emoji}</span>
+                            <div>
+                              <strong style={{ color: 'white' }}>{badge.name}</strong>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{badge.description}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    
+                    {/* Tarjeta Stats Generales */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Clasificación</span>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', marginTop: '4px' }}>{stats.profile.points} Pts</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {stats.exactGuessed} marcador exacto ({stats.exactPercent}%)
+                      </div>
+                    </div>
+
+                    {/* Tarjeta Dinero Ganado */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Bolsa Total Ganada</span>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
+                        ${stats.totalGain.toLocaleString('es-CO')}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Incluye partidos, especiales y P2P
+                      </div>
+                    </div>
+
+                    {/* Tarjeta Récord 1v1 */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Duelos 1v1</span>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', marginTop: '4px' }}>
+                        {stats.p2pWins} V / {stats.p2pLosses} D
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Total de duelos jugados: {stats.p2pWins + stats.p2pLosses}
+                      </div>
+                    </div>
+
+                    {/* Tarjeta Balance 1v1 */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', padding: '12px', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Balance Neto Duelos</span>
+                      <div style={{
+                        fontSize: '1.25rem',
+                        fontWeight: 800,
+                        color: stats.p2pNetGains >= 0 ? 'var(--primary)' : 'var(--accent-red)',
+                        marginTop: '4px'
+                      }}>
+                        {stats.p2pNetGains >= 0 ? '+' : ''}${stats.p2pNetGains.toLocaleString('es-CO')}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Saldo acumulado P2P
+                      </div>
+                    </div>
+
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
