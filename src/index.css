@@ -150,6 +150,16 @@ body {
   box-shadow: 0 0 12px var(--primary-glow);
 }
 
+/* Custom styling for select and options to prevent unreadable text on dark themes */
+select.form-input {
+  background-color: #111827; /* Force solid dark background for select element */
+}
+
+select.form-input option, select option {
+  background-color: #111827; /* Dark background for dropdown options */
+  color: #f3f4f6 !important; /* Light text for dropdown options */
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -301,6 +311,19 @@ body {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   overflow-x: auto;
+}
+
+/* Sub-tabs that should remain visible on mobile */
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 25px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab {
@@ -749,7 +772,7 @@ body {
   .desktop-only {
     display: none !important;
   }
-  .tabs {
+  .main-tabs {
     display: none !important; /* Habilitar navegación inferior en su lugar */
   }
   .app-main {

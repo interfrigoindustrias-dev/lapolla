@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import Instructions from './Instructions';
 import ChatWall from './ChatWall';
 import Confetti from './Confetti';
-import { Trophy, Calendar, Check, Play, Lock, Users, PlusCircle, LogIn, DollarSign, Sparkles, Send, Info, BookOpen, Award, CheckCircle2, XCircle, ArrowRight, Activity } from 'lucide-react';
+import { Trophy, Calendar, Check, Play, Lock, Users, PlusCircle, LogIn, DollarSign, Sparkles, Send, Info, BookOpen, Award, CheckCircle2, XCircle, ArrowRight, Activity, Zap, Bell } from 'lucide-react';
 
 const renderTeamIcon = (teamName, teamIcon) => {
   if (!teamIcon) {
@@ -90,6 +90,65 @@ export default function Dashboard({ onSelectPool }) {
       fetchCustomBetsData();
       fetchP2pData();
     }
+  }, [user]);
+
+  // Suscripción Realtime para Notificaciones de Retos 1v1
+  useEffect(() => {
+    if (!user) return;
+
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+
+    const channel = supabase
+      .channel(`p2p_challenges_realtime:${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'p2p_challenges',
+        filter: `challenged_id=eq.${user.id}`
+      }, async (payload) => {
+        // Refrescar los retos de la UI
+        fetchP2pData();
+
+        // Mostrar notificación flotante si está permitido
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            const challengerId = payload.new.challenger_id;
+            const matchId = payload.new.match_id;
+            const betAmount = payload.new.bet_amount;
+
+            // Consultar datos para el mensaje
+            const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', challengerId).single();
+            const { data: match } = await supabase.from('matches').select('team_a, team_b').eq('id', matchId).single();
+
+            const name = prof?.display_name || 'Un compañero';
+            const matchText = match ? `${match.team_a} vs ${match.team_b}` : 'un partido';
+
+            const notification = new Notification('⚔️ ¡Nuevo Reto 1v1 Recibido!', {
+              body: `${name} te ha retado para el partido ${matchText} por $${betAmount.toLocaleString('es-CO')} COP.`,
+              icon: '/favicon.svg',
+              requireInteraction: true
+            });
+
+            notification.onclick = () => {
+              window.focus();
+              setActiveTab('custom_bets');
+              setActiveSpecialSubTab('p2p');
+              notification.close();
+            };
+          } catch (err) {
+            console.error('Error mostrando notificación flotante:', err);
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const fetchMatches = async () => {
@@ -746,7 +805,7 @@ export default function Dashboard({ onSelectPool }) {
       {/* Columna Principal */}
       <div>
         {/* TABS ESCRITORIO */}
-        <div className="tabs">
+        <div className="tabs main-tabs">
           <button 
             className={`tab ${activeTab === 'matches' ? 'active' : ''}`}
             onClick={() => setActiveTab('matches')}
@@ -1044,14 +1103,41 @@ export default function Dashboard({ onSelectPool }) {
                               )}
                             </div>
                           ) : (
-                            <button
-                              className="btn btn-primary"
-                              style={{ padding: '8px 16px', width: 'auto', fontSize: '0.85rem' }}
-                              disabled={!hasChanged || savingPreds[match.id]}
-                              onClick={() => savePrediction(match.id, match)}
-                            >
-                              {savingPreds[match.id] ? '...' : pred ? 'Actualizar' : 'Apostar'}
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                className="btn btn-primary"
+                                style={{ padding: '8px 16px', width: 'auto', fontSize: '0.85rem' }}
+                                disabled={!hasChanged || savingPreds[match.id]}
+                                onClick={() => savePrediction(match.id, match)}
+                              >
+                                {savingPreds[match.id] ? '...' : pred ? 'Actualizar' : 'Apostar'}
+                              </button>
+                              {match.status === 'pending' && (
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{
+                                    padding: '8px 12px',
+                                    width: 'auto',
+                                    fontSize: '0.85rem',
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#f87171',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}
+                                  onClick={() => {
+                                    setP2pMatchId(match.id);
+                                    setActiveTab('custom_bets');
+                                    setActiveSpecialSubTab('p2p');
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }}
+                                  title="Retar a un compañero a un duelo 1v1 en este partido"
+                                >
+                                  <Zap size={14} /> Retar
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
 
@@ -1149,7 +1235,7 @@ export default function Dashboard({ onSelectPool }) {
         {/* 2. APUESTAS ESPECIALES & RETOS 1v1 */}
         {activeTab === 'custom_bets' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="tabs" style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+            <div className="admin-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
               <button 
                 className={`tab ${activeSpecialSubTab === 'specials' ? 'active' : ''}`}
                 onClick={() => setActiveSpecialSubTab('specials')}
@@ -1390,6 +1476,40 @@ export default function Dashboard({ onSelectPool }) {
 
             {activeSpecialSubTab === 'p2p' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
+                  <div style={{
+                    background: 'rgba(251, 191, 36, 0.05)',
+                    border: '1px solid rgba(251, 191, 36, 0.15)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    fontSize: '0.85rem'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Bell style={{ color: 'var(--secondary)' }} size={16} />
+                      <span>Habilita las notificaciones flotantes para enterarte al instante cuando te retan.</span>
+                    </div>
+                    <button
+                      className="btn btn-primary"
+                      style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        Notification.requestPermission().then(permission => {
+                          if (permission === 'granted') {
+                            alert('¡Notificaciones activadas con éxito!');
+                            window.location.reload();
+                          }
+                        });
+                      }}
+                    >
+                      Activar Notificaciones
+                    </button>
+                  </div>
+                )}
+
                 <div className="glass-container" style={{ padding: '20px' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <PlusCircle style={{ color: 'var(--primary)' }} /> Lanzar un Duelo 1v1
@@ -1488,7 +1608,7 @@ export default function Dashboard({ onSelectPool }) {
                   <Activity size={14} /> {simulatedMode ? 'Desactivar Simulador' : 'Simulador'}
                 </button>
 
-                <div className="tabs" style={{ marginBottom: 0, padding: '2px' }}>
+                <div className="admin-tabs" style={{ marginBottom: 0, padding: '2px' }}>
                   <button className={`tab ${leaderboardSubTab === 'users' ? 'active' : ''}`} onClick={() => setLeaderboardSubTab('users')} style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Individual</button>
                   <button className={`tab ${leaderboardSubTab === 'depts' ? 'active' : ''}`} onClick={() => setLeaderboardSubTab('depts')} style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Áreas</button>
                 </div>

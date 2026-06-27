@@ -225,7 +225,7 @@ export default function AdminPanel() {
       <body>
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
           <div>
-            <h1 style="margin: 0 0 5px 0;">LudoPollas - Control de Cobros</h1>
+            <h1 style="margin: 0 0 5px 0;">Interfrigo Pollas - Control de Cobros</h1>
             <div class="meta">Generado el ${new Date().toLocaleString('es-CO')} | Empresa: Interfrigo</div>
           </div>
           <button onclick="window.print();" style="padding: 10px 18px; background-color: #10b981; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 13px;">
@@ -268,7 +268,7 @@ export default function AdminPanel() {
         </table>
 
         <div class="footer">
-          LudoPollas - Control Interno. Todos los derechos reservados.
+          Interfrigo Pollas - Control Interno. Todos los derechos reservados.
         </div>
 
         <script>
@@ -541,7 +541,7 @@ export default function AdminPanel() {
         </div>
 
         {/* Sub-Tabs de Admin */}
-        <div className="tabs" style={{ marginBottom: 0, width: 'auto', flex: 'none' }}>
+        <div className="admin-tabs" style={{ marginBottom: 0, width: 'auto', flex: 'none' }}>
           <button 
             className={`tab ${activeSubTab === 'matches' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('matches')}
@@ -1250,7 +1250,7 @@ export default function AdminPanel() {
             <Users style={{ color: 'var(--primary)' }} /> Gestión de Usuarios y Administradores
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px', marginBottom: '20px' }}>
-            Aquí puedes promover usuarios de la empresa como administradores de LudoPollas o revocar sus permisos.
+            Aquí puedes promover usuarios de la empresa como administradores de Interfrigo Pollas o revocar sus permisos.
           </p>
 
           <div style={{ overflowX: 'auto' }}>

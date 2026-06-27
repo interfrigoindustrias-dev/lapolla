@@ -51,7 +51,7 @@ export default function AuthScreen() {
         <div className="auth-header">
           <h1 className="auth-logo">
             <Trophy size={36} style={{ color: '#fbbf24' }} />
-            LudoPollas
+            Interfrigo Pollas
           </h1>
           <p className="auth-subtitle">
             {isForgotPassword 

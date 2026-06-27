@@ -447,8 +447,9 @@ CREATE POLICY "Permitir insertar mensajes de chat propios"
     ON public.chat_messages FOR INSERT 
     WITH CHECK (auth.uid() = user_id);
 
--- 11. HABILITAR TIEMPO REAL (REALTIME) PARA EL CHAT
+-- 11. HABILITAR TIEMPO REAL (REALTIME) PARA EL CHAT Y RETOS
 -- Ejecuta esto para activar las notificaciones y mensajes instantáneos sin recargar
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.p2p_challenges;
 
 

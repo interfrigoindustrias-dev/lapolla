@@ -8,11 +8,11 @@ export default function Instructions({ isAdmin }) {
     <div className="glass-container" style={{ padding: '24px', width: '100%', gridColumn: '1 / -1' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
         <BookOpen size={28} style={{ color: 'var(--primary)' }} />
-        <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Guía de Uso de LudoPollas</h1>
+        <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Guía de Uso de Interfrigo Pollas</h1>
       </div>
 
       {/* Tabs instructivo */}
-      <div className="tabs" style={{ marginBottom: '20px' }}>
+      <div className="admin-tabs" style={{ marginBottom: '20px' }}>
         <button 
           className={`tab ${activeTab === 'user' ? 'active' : ''}`}
           onClick={() => setActiveTab('user')}

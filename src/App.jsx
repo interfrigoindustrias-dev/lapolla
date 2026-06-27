@@ -123,7 +123,7 @@ function AppContent() {
         color: 'var(--text-muted)'
       }}>
         <Trophy size={48} className="pulse" style={{ color: 'var(--secondary)', animation: 'pulse 1.5s infinite' }} />
-        <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>Cargando LudoPollas...</p>
+        <p style={{ fontWeight: 600, fontSize: '1.1rem' }}>Cargando Interfrigo Pollas...</p>
       </div>
     );
   }
@@ -143,7 +143,7 @@ function AppContent() {
             setIsAdminView(false);
           }}>
             <Trophy size={26} style={{ color: '#fbbf24' }} />
-            LudoPollas
+            Interfrigo Pollas
           </a>
 
           <div className="user-nav">
